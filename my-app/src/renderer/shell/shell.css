@@ -1,0 +1,68 @@
+/* Shell global styles — Linear+Obsidian dark */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #0d0d0d;
+  --color-surface: #141414;
+  --color-surface-hover: #1c1c1c;
+  --color-border: #262626;
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #888888;
+  --color-text-tertiary: #555555;
+  --color-accent: #5e6ad2;
+  --color-accent-hover: #6e7ae2;
+  --color-danger: #e5534b;
+  --color-tab-active: #1c1c1c;
+  --color-tab-inactive: transparent;
+  --color-loading: #5e6ad2;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --font-ui: 'Geist', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  --chrome-height: 72px;
+  --tab-height: 36px;
+  --toolbar-height: 36px;
+  --tab-min-width: 120px;
+  --tab-max-width: 220px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}

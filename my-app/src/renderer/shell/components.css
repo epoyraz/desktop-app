@@ -1,0 +1,285 @@
+/* Shell component styles */
+
+/* ---------------------------------------------------------------------------
+   WindowChrome
+   --------------------------------------------------------------------------- */
+.window-chrome {
+  display: flex;
+  flex-direction: column;
+  height: var(--chrome-height);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  -webkit-app-region: no-drag;
+}
+
+.window-chrome__tab-row {
+  display: flex;
+  align-items: center;
+  height: var(--tab-height);
+  -webkit-app-region: drag;
+}
+
+.window-chrome__traffic-light-spacer {
+  width: 72px;
+  height: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.window-chrome__toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-height);
+  padding: 0 8px;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------------------------
+   TabStrip
+   --------------------------------------------------------------------------- */
+.tab-strip {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.tab-strip__tabs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tab-strip__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: var(--tab-min-width);
+  max-width: var(--tab-max-width);
+  height: 28px;
+  padding: 0 10px;
+  margin: 4px 2px 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--color-tab-inactive);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.tab-item:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.tab-item--active {
+  background: var(--color-tab-active);
+  color: var(--color-text-primary);
+}
+
+.tab-item--drag-over {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.tab-item__favicon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tab-item__favicon img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.tab-item__favicon-placeholder {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.tab-item__spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--color-border);
+  border-top-color: var(--color-loading);
+  border-radius: 50%;
+  animation: tab-spin 0.6s linear infinite;
+  display: block;
+}
+
+@keyframes tab-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tab-item__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.tab-item__close {
+  display: none;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.tab-item:hover .tab-item__close,
+.tab-item--active .tab-item__close {
+  display: flex;
+}
+
+.tab-item__close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-danger);
+}
+
+.tab-strip__new-tab {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: 18px;
+  line-height: 1;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.tab-strip__new-tab:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* ---------------------------------------------------------------------------
+   NavButtons
+   --------------------------------------------------------------------------- */
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-buttons__btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.nav-buttons__btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.nav-buttons__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+   URLBar
+   --------------------------------------------------------------------------- */
+.url-bar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  gap: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.url-bar:focus-within {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+}
+
+.url-bar--insecure .url-bar__security {
+  color: var(--color-danger);
+}
+
+.url-bar--secure .url-bar__security {
+  color: var(--color-text-tertiary);
+}
+
+.url-bar__security {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.url-bar__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+}
+
+.url-bar__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.url-bar__loading {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--color-border);
+  border-top-color: var(--color-loading);
+  border-radius: 50%;
+  animation: tab-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}

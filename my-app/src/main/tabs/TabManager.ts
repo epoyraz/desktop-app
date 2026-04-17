@@ -1,0 +1,524 @@
+/**
+ * TabManager: owns one WebContentsView per browser tab.
+ * Handles create/destroy/activate/reorder, propagates tab state events
+ * (favicon, title, loading, navigate) to the renderer via IPC.
+ */
+
+import {
+  BrowserWindow,
+  WebContentsView,
+  ipcMain,
+  nativeImage,
+  app,
+} from 'electron';
+import { v4 as uuidv4 } from 'uuid';
+import { NavigationController } from './NavigationController';
+import { SessionStore, PersistedSession, PersistedTab } from './SessionStore';
+import { parseNavigationInput } from '../navigation';
+
+const NEW_TAB_URL = 'https://www.google.com';
+const CHROME_HEIGHT = 72; // shell toolbar height in pixels
+
+export interface TabState {
+  id: string;
+  url: string;
+  title: string;
+  favicon: string | null;
+  isLoading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+export interface TabManagerState {
+  tabs: TabState[];
+  activeTabId: string | null;
+  cdpPort: number | null;
+}
+
+export class TabManager {
+  private win: BrowserWindow;
+  private tabs: Map<string, WebContentsView> = new Map();
+  private tabOrder: string[] = [];
+  private activeTabId: string | null = null;
+  private navControllers: Map<string, NavigationController> = new Map();
+  private sessionStore: SessionStore;
+  private cdpPort: number | null = null;
+
+  constructor(win: BrowserWindow) {
+    this.win = win;
+    this.sessionStore = new SessionStore();
+    this.registerIpcHandlers();
+  }
+
+  // ---------------------------------------------------------------------------
+  // CDP port discovery
+  // ---------------------------------------------------------------------------
+
+  async discoverCdpPort(): Promise<number | null> {
+    // Try ports sequentially from Chromium's dynamic range
+    // The actual port is passed via --remote-debugging-port=0; we discover it
+    // by reading the devtools URL from the first WebContents after it's ready.
+    for (const [, view] of this.tabs) {
+      const wc = view.webContents;
+      const debuggerUrl: string = (wc as any).getURL
+        ? wc.getURL()
+        : '';
+      // Use the debugger port from the webContents devtools URL
+      const wsUrl: string | undefined = (wc as any).debugger?.url;
+      if (wsUrl) {
+        const match = wsUrl.match(/:(\d+)\//);
+        if (match) {
+          this.cdpPort = parseInt(match[1], 10);
+          console.log(`[TabManager] Discovered CDP port: ${this.cdpPort}`);
+          return this.cdpPort;
+        }
+      }
+    }
+
+    // Fallback: poll /json/version on common dynamic ports
+    for (let port = 49152; port <= 49200; port++) {
+      try {
+        const res = await fetch(`http://localhost:${port}/json/version`);
+        if (res.ok) {
+          this.cdpPort = port;
+          console.log(`[TabManager] Discovered CDP port via poll: ${port}`);
+          return port;
+        }
+      } catch {
+        // continue
+      }
+    }
+    console.warn('[TabManager] Could not discover CDP port');
+    return null;
+  }
+
+  async getActiveTabTargetId(): Promise<string | null> {
+    if (!this.activeTabId || !this.cdpPort) return null;
+    try {
+      const res = await fetch(`http://localhost:${this.cdpPort}/json`);
+      const targets = (await res.json()) as Array<{
+        id: string;
+        type: string;
+        url: string;
+      }>;
+      const activeView = this.tabs.get(this.activeTabId);
+      if (!activeView) return null;
+      const currentUrl = activeView.webContents.getURL();
+      const target = targets.find(
+        (t) => t.type === 'page' && t.url === currentUrl,
+      );
+      return target?.id ?? null;
+    } catch (err) {
+      console.error('[TabManager] Failed to get active tab target ID:', err);
+      return null;
+    }
+  }
+
+  async getActiveTabCdpUrl(): Promise<string | null> {
+    const targetId = await this.getActiveTabTargetId();
+    if (!targetId || !this.cdpPort) return null;
+    return `ws://localhost:${this.cdpPort}/devtools/page/${targetId}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session restore
+  // ---------------------------------------------------------------------------
+
+  restoreSession(): void {
+    const session = this.sessionStore.load();
+    if (session.tabs.length === 0) {
+      console.log('[TabManager] No saved tabs, opening new tab');
+      this.createTab(NEW_TAB_URL);
+      return;
+    }
+
+    console.log(`[TabManager] Restoring ${session.tabs.length} tabs`);
+    for (const persisted of session.tabs) {
+      this.createTab(persisted.url, persisted.id);
+    }
+
+    if (session.activeTabId && this.tabs.has(session.activeTabId)) {
+      this.activateTab(session.activeTabId);
+    } else if (this.tabOrder.length > 0) {
+      this.activateTab(this.tabOrder[0]);
+    }
+  }
+
+  private buildPersistedSession(): PersistedSession {
+    const tabs: PersistedTab[] = this.tabOrder.map((id) => {
+      const view = this.tabs.get(id)!;
+      return {
+        id,
+        url: view.webContents.getURL() || NEW_TAB_URL,
+        title: view.webContents.getTitle() || 'New Tab',
+      };
+    });
+    return { version: 1, tabs, activeTabId: this.activeTabId };
+  }
+
+  saveSession(): void {
+    this.sessionStore.save(this.buildPersistedSession());
+  }
+
+  flushSession(): void {
+    this.sessionStore.flushSync();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tab lifecycle
+  // ---------------------------------------------------------------------------
+
+  createTab(url?: string, id?: string): string {
+    const tabId = id ?? uuidv4();
+    const targetUrl = url ?? NEW_TAB_URL;
+
+    console.log(`[TabManager] Creating tab ${tabId} → ${targetUrl}`);
+
+    const view = new WebContentsView({
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+
+    this.win.contentView.addChildView(view);
+    this.tabs.set(tabId, view);
+    this.tabOrder.push(tabId);
+    this.navControllers.set(tabId, new NavigationController(view));
+
+    this.attachViewEvents(tabId, view);
+    this.positionView(view);
+
+    view.webContents.loadURL(targetUrl);
+
+    this.activateTab(tabId);
+    this.saveSession();
+    this.broadcastState();
+
+    return tabId;
+  }
+
+  closeTab(tabId: string): void {
+    const view = this.tabs.get(tabId);
+    if (!view) {
+      console.warn(`[TabManager] closeTab: unknown tab ${tabId}`);
+      return;
+    }
+
+    console.log(`[TabManager] Closing tab ${tabId}`);
+
+    this.win.contentView.removeChildView(view);
+    (view.webContents as any).destroy?.();
+
+    this.tabs.delete(tabId);
+    this.navControllers.delete(tabId);
+    this.tabOrder = this.tabOrder.filter((id) => id !== tabId);
+
+    if (this.activeTabId === tabId) {
+      const newActive = this.tabOrder[this.tabOrder.length - 1] ?? null;
+      this.activeTabId = null;
+      if (newActive) {
+        this.activateTab(newActive);
+      } else {
+        // No tabs left — open a new one
+        this.createTab(NEW_TAB_URL);
+        return;
+      }
+    }
+
+    this.saveSession();
+    this.broadcastState();
+  }
+
+  activateTab(tabId: string): void {
+    const view = this.tabs.get(tabId);
+    if (!view) {
+      console.warn(`[TabManager] activateTab: unknown tab ${tabId}`);
+      return;
+    }
+
+    // Hide previous active view
+    if (this.activeTabId && this.activeTabId !== tabId) {
+      const prev = this.tabs.get(this.activeTabId);
+      if (prev) prev.setVisible(false);
+    }
+
+    this.activeTabId = tabId;
+    view.setVisible(true);
+    this.positionView(view);
+    view.webContents.focus();
+
+    console.log(`[TabManager] Activated tab ${tabId}`);
+    this.win.webContents.send('tab-activated', tabId);
+    this.broadcastState();
+  }
+
+  moveTab(tabId: string, toIndex: number): void {
+    const fromIndex = this.tabOrder.indexOf(tabId);
+    if (fromIndex === -1) return;
+    this.tabOrder.splice(fromIndex, 1);
+    this.tabOrder.splice(Math.max(0, Math.min(toIndex, this.tabOrder.length)), 0, tabId);
+    console.log(`[TabManager] Moved tab ${tabId} to index ${toIndex}`);
+    this.saveSession();
+    this.broadcastState();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation (delegated)
+  // ---------------------------------------------------------------------------
+
+  navigate(tabId: string, input: string): void {
+    const url = parseNavigationInput(input);
+    const nav = this.navControllers.get(tabId);
+    if (nav) {
+      nav.navigate(url);
+    } else {
+      console.warn(`[TabManager] navigate: no controller for tab ${tabId}`);
+    }
+  }
+
+  navigateActive(input: string): void {
+    if (this.activeTabId) this.navigate(this.activeTabId, input);
+  }
+
+  goBack(tabId: string): void {
+    this.navControllers.get(tabId)?.goBack();
+  }
+
+  goForward(tabId: string): void {
+    this.navControllers.get(tabId)?.goForward();
+  }
+
+  reload(tabId: string): void {
+    this.navControllers.get(tabId)?.reload();
+  }
+
+  goBackActive(): void {
+    if (this.activeTabId) this.goBack(this.activeTabId);
+  }
+
+  goForwardActive(): void {
+    if (this.activeTabId) this.goForward(this.activeTabId);
+  }
+
+  reloadActive(): void {
+    if (this.activeTabId) this.reload(this.activeTabId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // State accessors
+  // ---------------------------------------------------------------------------
+
+  getActiveTabId(): string | null {
+    return this.activeTabId;
+  }
+
+  getTabCount(): number {
+    return this.tabs.size;
+  }
+
+  getTabAtIndex(index: number): string | undefined {
+    return this.tabOrder[index];
+  }
+
+  getState(): TabManagerState {
+    const tabs: TabState[] = this.tabOrder.map((id) => {
+      const view = this.tabs.get(id)!;
+      const nav = this.navControllers.get(id)!;
+      return {
+        id,
+        url: view.webContents.getURL(),
+        title: view.webContents.getTitle() || 'New Tab',
+        favicon: null,
+        isLoading: view.webContents.isLoading(),
+        canGoBack: nav.canGoBack(),
+        canGoForward: nav.canGoForward(),
+      };
+    });
+    return { tabs, activeTabId: this.activeTabId, cdpPort: this.cdpPort };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Window resize handling
+  // ---------------------------------------------------------------------------
+
+  relayout(): void {
+    for (const [id, view] of this.tabs) {
+      if (id === this.activeTabId) {
+        this.positionView(view);
+      }
+    }
+  }
+
+  private positionView(view: WebContentsView): void {
+    const [winWidth, winHeight] = this.win.getContentSize();
+    view.setBounds({
+      x: 0,
+      y: CHROME_HEIGHT,
+      width: winWidth,
+      height: Math.max(0, winHeight - CHROME_HEIGHT),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal: event attachment
+  // ---------------------------------------------------------------------------
+
+  private attachViewEvents(tabId: string, view: WebContentsView): void {
+    const wc = view.webContents;
+
+    wc.on('page-title-updated', (_e, title) => {
+      console.log(`[TabManager] tab ${tabId} title: ${title}`);
+      this.sendTabUpdate(tabId);
+    });
+
+    wc.on('page-favicon-updated', (_e, favicons) => {
+      const favicon = favicons[0] ?? null;
+      console.log(`[TabManager] tab ${tabId} favicon: ${favicon}`);
+      // Store favicon on the view for state retrieval
+      (view as any)._favicon = favicon;
+      this.sendTabFaviconUpdate(tabId, favicon);
+      this.broadcastState();
+    });
+
+    wc.on('did-start-loading', () => {
+      console.log(`[TabManager] tab ${tabId} loading started`);
+      this.sendTabUpdate(tabId);
+    });
+
+    wc.on('did-stop-loading', () => {
+      console.log(`[TabManager] tab ${tabId} loading stopped`);
+      this.sendTabUpdate(tabId);
+    });
+
+    wc.on('did-navigate', (_e, url) => {
+      console.log(`[TabManager] tab ${tabId} navigated: ${url}`);
+      this.sendTabUpdate(tabId);
+      this.saveSession();
+    });
+
+    wc.on('did-navigate-in-page', (_e, url) => {
+      console.log(`[TabManager] tab ${tabId} in-page navigate: ${url}`);
+      this.sendTabUpdate(tabId);
+      this.saveSession();
+    });
+
+    wc.on('did-finish-load', () => {
+      console.log(`[TabManager] tab ${tabId} finished loading`);
+      this.sendTabUpdate(tabId);
+    });
+
+    wc.on('new-window' as any, (e: Event, url: string) => {
+      e.preventDefault();
+      this.createTab(url);
+    });
+
+    // Handle target_lost for active tab agent enforcement
+    wc.on('destroyed', () => {
+      console.log(`[TabManager] tab ${tabId} WebContents destroyed`);
+      if (!this.win.isDestroyed() && !this.win.webContents.isDestroyed()) {
+        this.win.webContents.send('target-lost', { tabId });
+      }
+    });
+  }
+
+  private sendTabUpdate(tabId: string): void {
+    const view = this.tabs.get(tabId);
+    if (!view) return;
+    const nav = this.navControllers.get(tabId);
+    const state: TabState = {
+      id: tabId,
+      url: view.webContents.getURL(),
+      title: view.webContents.getTitle() || 'New Tab',
+      favicon: (view as any)._favicon ?? null,
+      isLoading: view.webContents.isLoading(),
+      canGoBack: nav?.canGoBack() ?? false,
+      canGoForward: nav?.canGoForward() ?? false,
+    };
+    this.safeSend('tab-updated', state);
+  }
+
+  private sendTabFaviconUpdate(tabId: string, favicon: string | null): void {
+    this.safeSend('tab-favicon-updated', { tabId, favicon });
+  }
+
+  private broadcastState(): void {
+    const state = this.getState();
+    this.safeSend('tabs-state', state);
+  }
+
+  private safeSend(channel: string, payload: unknown): void {
+    if (this.win.isDestroyed() || this.win.webContents.isDestroyed()) return;
+    this.win.webContents.send(channel, payload);
+  }
+
+  // ---------------------------------------------------------------------------
+  // IPC handlers
+  // ---------------------------------------------------------------------------
+
+  private registerIpcHandlers(): void {
+    ipcMain.handle('tabs:create', (_e, url?: string) => {
+      return this.createTab(url);
+    });
+
+    ipcMain.handle('tabs:close', (_e, tabId: string) => {
+      this.closeTab(tabId);
+    });
+
+    ipcMain.handle('tabs:activate', (_e, tabId: string) => {
+      this.activateTab(tabId);
+    });
+
+    ipcMain.handle('tabs:move', (_e, tabId: string, toIndex: number) => {
+      this.moveTab(tabId, toIndex);
+    });
+
+    ipcMain.handle('tabs:navigate', (_e, tabId: string, input: string) => {
+      this.navigate(tabId, input);
+    });
+
+    ipcMain.handle('tabs:navigate-active', (_e, input: string) => {
+      this.navigateActive(input);
+    });
+
+    ipcMain.handle('tabs:back', (_e, tabId: string) => {
+      this.goBack(tabId);
+    });
+
+    ipcMain.handle('tabs:forward', (_e, tabId: string) => {
+      this.goForward(tabId);
+    });
+
+    ipcMain.handle('tabs:reload', (_e, tabId: string) => {
+      this.reload(tabId);
+    });
+
+    ipcMain.handle('tabs:get-state', () => {
+      return this.getState();
+    });
+
+    ipcMain.handle('tabs:get-active-cdp-url', async () => {
+      return this.getActiveTabCdpUrl();
+    });
+
+    ipcMain.handle('tabs:get-active-target-id', async () => {
+      return this.getActiveTabTargetId();
+    });
+  }
+
+  destroy(): void {
+    ipcMain.removeHandler('tabs:create');
+    ipcMain.removeHandler('tabs:close');
+    ipcMain.removeHandler('tabs:activate');
+    ipcMain.removeHandler('tabs:move');
+    ipcMain.removeHandler('tabs:navigate');
+    ipcMain.removeHandler('tabs:navigate-active');
+    ipcMain.removeHandler('tabs:back');
+    ipcMain.removeHandler('tabs:forward');
+    ipcMain.removeHandler('tabs:reload');
+    ipcMain.removeHandler('tabs:get-state');
+    ipcMain.removeHandler('tabs:get-active-cdp-url');
+    ipcMain.removeHandler('tabs:get-active-target-id');
+  }
+}
