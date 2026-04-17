@@ -6,6 +6,15 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { WindowChrome } from './WindowChrome';
+
+// Design tokens MUST load before any component CSS. shell.css + components.css
+// reference semantic vars (--color-bg-base, --slate-*, etc.) defined in
+// theme.global.css :root. Without this, every var() resolves to nothing →
+// transparent surfaces → black renderer. theme.shell.css is intentionally NOT
+// imported: its component-scoped [data-theme="shell"] .tab-strip rules would
+// override components.css layout. The :root in theme.global.css already ships
+// shell-theme defaults (slate ramp is the shell palette).
+import '../design/theme.global.css';
 import './shell.css';
 import './components.css';
 
