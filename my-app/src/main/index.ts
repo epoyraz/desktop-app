@@ -7,6 +7,14 @@
  *   - accountStore.isOnboardingComplete() == true  → shell window directly
  */
 
+import { config as loadDotEnv } from 'dotenv';
+import path from 'node:path';
+
+// Load .env from the app root (my-app/.env) BEFORE any module reads
+// process.env. In production the key comes from the keychain; .env is the
+// dev-time fallback.
+loadDotEnv({ path: path.resolve(__dirname, '..', '..', '.env') });
+
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, MenuItemConstructorOptions } from 'electron';
 import started from 'electron-squirrel-startup';
 import { createShellWindow } from './window';
