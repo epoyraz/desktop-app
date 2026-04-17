@@ -32,9 +32,7 @@ import { registerProtocol, initOAuthHandler } from './oauth';
 import { createOnboardingWindow } from './identity/onboardingWindow';
 import { registerOnboardingHandlers, unregisterOnboardingHandlers } from './identity/onboardingHandlers';
 import { mainLogger } from './logger';
-// Track 1 — Agent wiring: daemon lifecycle + API key
-import { DaemonClient } from './daemon/client';
-import { startDaemon, stopDaemon, handlePillSubmit, handlePillCancel, _getDaemonPid, _getRestartCount, _getSocketPath } from './daemonLifecycle';
+// daemon imports removed — Docker-per-task architecture replaces the persistent daemon
 import { getApiKey } from './agentApiKey';
 import { assertString } from './ipc-validators';
 // Wave HL — in-process TS agent (harnessless port)
@@ -108,7 +106,6 @@ let bookmarkStore: BookmarkStore | null = null;
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({ clientId: process.env.GOOGLE_CLIENT_ID ?? 'PLACEHOLDER_CLIENT_ID' });
 const keychainStore = new KeychainStore();
-const daemonClient = new DaemonClient();
 
 // ---------------------------------------------------------------------------
 // Helper: open shell window and wire it up (used by both paths)
@@ -202,8 +199,7 @@ app.whenReady().then(async () => {
       tabManager ? tabManager.getAllTabSummaries() : [],
   });
 
-  // pill:submit — routed via engine flag. hl-inprocess uses the TS port; python-daemon
-  // is the legacy path. Both return { task_id } on success.
+  // pill:submit — spawns a Docker container with the agent loop.
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
     const validatedPrompt = assertString(prompt, 'prompt', 10000);
     const account = accountStore.load();
@@ -239,7 +235,7 @@ app.whenReady().then(async () => {
   // hl:get-engine / hl:set-engine — let the renderer/settings drive the flag flip.
   ipcMain.handle('hl:get-engine', () => getEngine());
   ipcMain.handle('hl:set-engine', (_event, { engine }: { engine: string }) => {
-    const e = engine === 'python-daemon' || engine === 'hl-inprocess' ? (engine as EngineId) : 'hl-inprocess';
+    const e: EngineId = 'hl-inprocess';
     setEngine(e);
     return e;
   });
@@ -316,33 +312,13 @@ app.whenReady().then(async () => {
     openShellAndWire();
   }
 
-  // Track 1: Start daemon after shell is ready (async, non-blocking)
-  (async () => {
-    try {
-      const account = accountStore.load();
-      const apiKey = await getApiKey({ accountEmail: account?.email });
-      if (apiKey) {
-        await startDaemon({ apiKey, daemonClient });
-        mainLogger.info('main.daemon.started', { msg: 'Agent daemon started and connected' });
-      } else {
-        mainLogger.warn('main.daemon.noApiKey', {
-          msg: 'No API key available — daemon not started. Configure via Settings.',
-        });
-      }
-    } catch (err) {
-      mainLogger.error('main.daemon.startFailed', {
-        error: (err as Error).message,
-        stack: (err as Error).stack,
-      });
-    }
-  })();
+
 
   // Flush session + bookmarks on quit
   app.on('before-quit', async () => {
-    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + stopping daemon + hl teardown' });
+    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + hl teardown' });
     tabManager?.flushSession();
     bookmarkStore?.flushSync();
-    await stopDaemon();
     await teardownHl();
   });
 
@@ -825,39 +801,6 @@ if (process.env.NODE_ENV === 'test') {
     openShellAndWire();
 
     mainLogger.info('main.test:complete-onboarding.done', { msg: 'Shell opened, onboarding bypassed' });
-  });
-
-  // ---------------------------------------------------------------------------
-  // DEV/TEST IPC: test:get-daemon-pid
-  // Returns the PID of the currently running daemon child process, or null.
-  // Used by daemon-crash-recovery.spec.ts to get the PID before killing it.
-  // ---------------------------------------------------------------------------
-  ipcMain.handle('test:get-daemon-pid', () => {
-    const pid = _getDaemonPid();
-    mainLogger.info('main.test:get-daemon-pid', { pid });
-    return pid;
-  });
-
-  // ---------------------------------------------------------------------------
-  // DEV/TEST IPC: test:get-restart-count
-  // Returns the current daemon restart count from daemonLifecycle module state.
-  // Used by daemon-crash-recovery.spec.ts to assert restartCount === 1 after kill.
-  // ---------------------------------------------------------------------------
-  ipcMain.handle('test:get-restart-count', () => {
-    const count = _getRestartCount();
-    mainLogger.info('main.test:get-restart-count', { count });
-    return count;
-  });
-
-  // ---------------------------------------------------------------------------
-  // DEV/TEST IPC: test:get-daemon-socket
-  // Returns the current daemon Unix socket path (or null if daemon not started).
-  // Used by multi-instance.spec.ts to assert PID-scoped socket uniqueness.
-  // ---------------------------------------------------------------------------
-  ipcMain.handle('test:get-daemon-socket', () => {
-    const socketPath = _getSocketPath();
-    mainLogger.info('main.test:get-daemon-socket', { socketPath });
-    return socketPath;
   });
 
   // ---------------------------------------------------------------------------
