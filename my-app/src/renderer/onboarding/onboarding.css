@@ -1,0 +1,80 @@
+/*
+ * onboarding.css — onboarding-specific layout overrides.
+ * Only styles that cannot be expressed via theme.onboarding.css classes go here.
+ * Rule: zero !important, zero Inter references, zero hardcoded hex colors.
+ *
+ * This file is imported in onboarding/index.tsx after theme.onboarding.css.
+ */
+
+/* Full-height root for the onboarding window (920 × 640, not resizable) */
+html,
+body,
+#onboarding-root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Traffic-light area clearance (hiddenInset titlebar on macOS = ~28px) */
+body {
+  padding-top: 28px;
+}
+
+/* Onboarding root fills the padded body */
+.onboarding-root {
+  height: calc(100% - 0px);
+}
+
+/* Input focus outline uses the accent glow (overrides global :focus-visible) */
+.auth-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent-default);
+  box-shadow: var(--glow-accent);
+}
+
+/* Disabled state for submit button */
+.auth-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Google button disabled */
+.google-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Name placeholder inline emphasis */
+.name-placeholder {
+  font-style: italic;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+/* Completion screen */
+.completion-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 24px;
+  background-color: var(--color-bg-base);
+  animation: fade-in var(--duration-moderate) var(--ease-decelerate) forwards;
+}
+
+.completion-checkmark {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-status-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: scale-in var(--duration-moderate) var(--ease-spring) forwards;
+}
