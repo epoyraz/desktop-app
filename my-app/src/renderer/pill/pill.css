@@ -1,0 +1,245 @@
+/*
+ * Track B — Pill overlay scoped styles.
+ *
+ * The pill window is transparent + frameless. This CSS:
+ * - Resets body/html to transparent (no background bleed)
+ * - Provides the pill container shape (rounded pill / capsule)
+ * - Handles collapsed (input only) and expanded (input + toast/result) states
+ * - Uses CSS custom properties from theme.shell.css (imported in index.tsx)
+ *
+ * Rules:
+ * - No !important (CLAUDE.md constraint)
+ * - No Inter font (CLAUDE.md constraint)
+ * - No hardcoded hex colors (use CSS vars from design tokens)
+ * - No left outline / vibe-coding artifacts
+ */
+
+/* ---------------------------------------------------------------------------
+ * Reset — transparent window requires transparent html/body
+ * --------------------------------------------------------------------------- */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  /* Geist or system fallback per Track G tokens */
+  font-family: var(--font-ui, system-ui, -apple-system, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#pill-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* ---------------------------------------------------------------------------
+ * Pill container — the visible pill shape
+ * --------------------------------------------------------------------------- */
+
+.pill-container {
+  width: 100%;
+  background: var(--color-bg-elevated, #1a1a1a);
+  border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-2xl, 18px);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.6));
+  overflow: hidden;
+  /* Smooth height transitions as toast/result appear */
+  transition: height var(--duration-normal, 200ms) var(--ease-decelerate, ease-out);
+}
+
+/* ---------------------------------------------------------------------------
+ * Input row — the collapsed state (height 72px)
+ * --------------------------------------------------------------------------- */
+
+.pill-input-row {
+  display: flex;
+  align-items: center;
+  height: 72px;
+  padding: 0 20px;
+  gap: 12px;
+}
+
+.pill-input-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pill-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--color-fg-primary, #f0f0f0);
+  caret-color: var(--color-accent-default, #c8f135);
+  line-height: 1.4;
+}
+
+.pill-input::placeholder {
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
+}
+
+.pill-input-hint {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Divider between input row and toast/result
+ * --------------------------------------------------------------------------- */
+
+.pill-divider {
+  height: 1px;
+  background: var(--color-border-default, rgba(255, 255, 255, 0.08));
+  margin: 0 16px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Progress toast area
+ * --------------------------------------------------------------------------- */
+
+.pill-toast {
+  padding: 12px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+}
+
+.pill-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-fg-secondary, rgba(255, 255, 255, 0.6));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pill-toast-step {
+  font-size: 13px;
+  color: var(--color-fg-primary, #f0f0f0);
+  line-height: 1.5;
+}
+
+.pill-toast-step-number {
+  font-size: 11px;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+ * Result display area
+ * --------------------------------------------------------------------------- */
+
+.pill-result {
+  padding: 12px 20px 16px;
+  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+}
+
+.pill-result-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pill-result-done-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--color-status-success, #4ade80);
+}
+
+.pill-result-text {
+  font-size: 13px;
+  color: var(--color-fg-primary, #f0f0f0);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.pill-result-dismiss {
+  font-size: 11px;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  margin-top: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Error / target_lost state
+ * --------------------------------------------------------------------------- */
+
+.pill-error {
+  padding: 12px 20px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+}
+
+.pill-error-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--color-status-error, #f87171);
+}
+
+.pill-error-text {
+  font-size: 13px;
+  color: var(--color-fg-primary, #f0f0f0);
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * Spinner (re-used from base components but overridden for pill context)
+ * --------------------------------------------------------------------------- */
+
+.pill-spinner {
+  width: 14px;
+  height: 14px;
+  color: var(--color-accent-default, #c8f135);
+}
+
+/* ---------------------------------------------------------------------------
+ * Queued task indicator
+ * --------------------------------------------------------------------------- */
+
+.pill-queued-badge {
+  font-size: 11px;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  padding: 2px 8px;
+  background: var(--color-bg-overlay, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-full, 9999px);
+}
+
+/* ---------------------------------------------------------------------------
+ * Animations
+ * --------------------------------------------------------------------------- */
+
+@keyframes pill-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
