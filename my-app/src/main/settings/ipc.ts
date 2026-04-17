@@ -17,6 +17,7 @@ import { mainLogger } from '../logger';
 import type { AccountStore } from '../identity/AccountStore';
 import type { KeychainStore } from '../identity/KeychainStore';
 import { getSettingsWindow } from './SettingsWindow';
+import { assertString, assertOneOf } from '../ipc-validators';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -35,6 +36,9 @@ const AGENTIC_SERVICE_PREFIX = 'com.agenticbrowser.';
 const DAEMON_SOCK_PREFIX     = 'daemon-';
 const DAEMON_SOCK_SUFFIX     = '.sock';
 const LOGS_DIR_NAME          = 'logs';
+
+const ALLOWED_THEMES = ['onboarding', 'shell'] as const;
+type ThemeName = typeof ALLOWED_THEMES[number];
 
 const GOOGLE_SCOPE_LIST = [
   { scope: 'email',    label: 'Email address' },
@@ -95,7 +99,9 @@ function maskApiKey(key: string): string {
 // ---------------------------------------------------------------------------
 
 async function handleSaveApiKey(_event: Electron.IpcMainInvokeEvent, key: string): Promise<void> {
-  mainLogger.info(CH_SAVE_API_KEY, { keyLength: key.length, source: 'settings-ui' });
+  const validatedKey = assertString(key, 'key', 500);
+  mainLogger.info(CH_SAVE_API_KEY, { keyLength: validatedKey.length, source: 'settings-ui' });
+  key = validatedKey;
 
   const account = _accountStore?.load();
   const accountKey = account?.email ?? 'default';
@@ -236,6 +242,7 @@ function handleGetAgentName(): string | null {
 }
 
 function handleSetAgentName(_event: Electron.IpcMainInvokeEvent, name: string): void {
+  name = assertString(name, 'name', 100);
   mainLogger.info(CH_SET_AGENT_NAME, { nameLength: name.length });
 
   if (!_accountStore) {
@@ -269,12 +276,13 @@ function handleGetTheme(): string {
 }
 
 function handleSetTheme(_event: Electron.IpcMainInvokeEvent, theme: string): void {
-  mainLogger.info(CH_SET_THEME, { theme });
+  const validatedTheme: ThemeName = assertOneOf(theme, 'theme', ALLOWED_THEMES);
+  mainLogger.info(CH_SET_THEME, { theme: validatedTheme });
   const prefsPath = getPrefsPath();
   try {
     fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
-    fs.writeFileSync(prefsPath, JSON.stringify({ theme }, null, 2), 'utf-8');
-    mainLogger.info(`${CH_SET_THEME}.ok`, { theme });
+    fs.writeFileSync(prefsPath, JSON.stringify({ theme: validatedTheme }, null, 2), 'utf-8');
+    mainLogger.info(`${CH_SET_THEME}.ok`, { theme: validatedTheme });
   } catch (err) {
     mainLogger.error(`${CH_SET_THEME}.failed`, { error: (err as Error).message });
     throw err;

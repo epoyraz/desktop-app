@@ -28,6 +28,7 @@ import { mainLogger } from './logger';
 import { DaemonClient } from './daemon/client';
 import { startDaemon, stopDaemon, handlePillSubmit, handlePillCancel, _getDaemonPid, _getRestartCount, _getSocketPath } from './daemonLifecycle';
 import { getApiKey } from './agentApiKey';
+import { assertString } from './ipc-validators';
 // Track 5 — Settings
 import { openSettingsWindow, closeSettingsWindow, getSettingsWindow } from './settings/SettingsWindow';
 import { registerSettingsHandlers, unregisterSettingsHandlers } from './settings/ipc';
@@ -136,9 +137,10 @@ app.whenReady().then(async () => {
 
   // Track 1 IPC: pill:submit — get active CDP URL, send agent_task to daemon
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
+    const validatedPrompt = assertString(prompt, 'prompt', 10000);
     const account = accountStore.load();
     return handlePillSubmit({
-      prompt,
+      prompt: validatedPrompt,
       getActiveTabCdpUrl: async () => tabManager ? await tabManager.getActiveTabCdpUrl() : null,
       daemonClient,
       getApiKey: () => getApiKey({ accountEmail: account?.email }),
