@@ -24,13 +24,15 @@
 - [iter 6b | 03:05Z] Python pytest 252/253 + README + CONTRIBUTING + CHANGELOG (2 commits)
 - [iter 7 | 03:11Z] real-LLM agent-task-wiki spec + fixture + settings build-renderer script + axe-core a11y audit (4 commits)
 - [iter 8 | 03:56Z] agent-task-wiki e2e GREEN — option (a) CDP fix + daemon asyncio fix + _seq echo + renderer paths (1 commit fab3e69)
+- [iter 9 | 04:00Z] daemon crash recovery e2e GREEN (4/4) + _getDaemonPid + test IPCs (2 commits f84a23b, 0f80587)
+- [iter 10 | 04:30Z] performance audit — shell 196KB / pill 205KB / settings 213KB JS (all PASS <400KB); main.js 115KB; app.asar 36KB; 118 vitest GREEN; PERFORMANCE.md written (1 commit)
 
 ---
 
 ## Current branch state
 
 - Branch: `feat/agent-wiring`
-- Commits ahead of 29d3edf (prior HEAD): **37**
+- Commits ahead of 29d3edf (prior HEAD): **51**
 - Track 1 (Agent wiring) — **DONE**
 - Track 2 (Design polish) — **DONE** across all 5 families
 - Track 3 (QA harness) — **DONE**
@@ -40,7 +42,7 @@
 
 ## Test state
 
-- Vitest unit+integration: **117 pass / 0 fail** (9 test files)
+- Vitest unit+integration: **118 pass / 0 fail** (9 test files)
 - preload-path.spec.ts (Playwright): **5 pass**
 - visual:capture (Playwright): **15/15 spec pass**, 10 PNG baselines committed
 - E2E Playwright pill-flow: **6/6 GREEN** (iter 6: fixed dynamic import() → electron context param)
@@ -66,6 +68,9 @@ Do NOT override Vite `root` in vite.settings.config.ts (violates project memory)
 
 ### P4 — DONE (iter 8): Agent-task-wiki e2e GREEN
 `tests/e2e/agent-task-wiki.spec.ts`: real agent task against a local wikipedia fixture page. Passed in 55.9s. Fixes applied: option (a) CDP port, daemon asyncio fix, _seq protocol echo, renderer path corrections, real agent_daemon binary built. Result: `PASS: page at bottom (scrollY=0, scrollHeight=72)`.
+
+### P-Perf — DONE (iter 10): Performance audit
+`my-app/docs/PERFORMANCE.md` written. All bundle targets MET: renderer JS <400KB (shell 196KB, pill 205KB, settings 213KB), main 115KB, app.asar 36KB. Estimated startup <1s. Vitest 118/0.
 
 ### P5 — Python pytest audit
 `cd my-app/python && pytest` — report counts. Fix anything trivial (imports, deprecation warnings).
