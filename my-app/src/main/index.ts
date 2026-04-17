@@ -266,11 +266,17 @@ app.whenReady().then(async () => {
   // the WebContentsView below the chrome.
   ipcMain.handle('shell:set-chrome-height', (_e, height: unknown) => {
     if (typeof height !== 'number' || !Number.isFinite(height)) return;
-    // The renderer sends the *total* chrome height. TabManager stores only the
-    // offset on top of its baseline (76).
     const BASE = 76;
     const offset = Math.max(0, height - BASE);
     tabManager?.setChromeOffset(offset);
+  });
+
+  // pill:set-expanded — renderer asks the main process to grow/shrink the pill
+  // window as palette/stream content toggles. Collapsed = 56, expanded = 320
+  ipcMain.handle('pill:set-expanded', (_event, expanded: boolean) => {
+    const { PILL_HEIGHT_COLLAPSED: H_COLLAPSED, PILL_HEIGHT_EXPANDED: H_EXPANDED } = require('./pill') as { PILL_HEIGHT_COLLAPSED: number; PILL_HEIGHT_EXPANDED: number };
+    const { setPillHeight: resize } = require('./pill') as { setPillHeight: (h: number) => void };
+    resize(expanded ? H_EXPANDED : H_COLLAPSED);
   });
 
   // Track 5 — Settings IPC handlers
