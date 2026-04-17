@@ -8,6 +8,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StepIndicator } from './StepIndicator';
 import { CharacterMascot } from './CharacterMascot';
+import { KeyHint } from '../components/base';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -161,6 +162,17 @@ export function NamingFlow({ onNext, onBack }: NamingFlowProps): React.ReactElem
             >
               Continue →
             </button>
+          </div>
+          {/* KeyHints: Enter to submit, Esc handled by onBack / focus */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <KeyHint keys={['Enter']} size="xs" />
+              <span className="onboarding-eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>submit</span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <KeyHint keys={['Esc']} size="xs" />
+              <span className="onboarding-eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>cancel</span>
+            </span>
           </div>
         </form>
       </div>
