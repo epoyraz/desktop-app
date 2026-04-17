@@ -70,13 +70,20 @@ export function URLBar({
     }
   }, [url, isEditing]);
 
-  // Handle focus-url-bar IPC event
+  // Handle focus-url-bar IPC event — setTimeout handles the case where the
+  // IPC fires before the input mounts (new tab creation).
   useEffect(() => {
-    if (focused && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-      onFocusClear();
-    }
+    if (!focused) return;
+    const doFocus = (): void => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      }
+    };
+    doFocus();
+    const t = setTimeout(doFocus, 0);
+    onFocusClear();
+    return () => clearTimeout(t);
   }, [focused, onFocusClear]);
 
   const handleFocus = useCallback(() => {
