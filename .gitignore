@@ -1,1 +1,49 @@
+# Dependencies
+node_modules/
+my-app/node_modules/
+
+# Build artifacts
+my-app/dist/
+my-app/out/
+my-app/.vite/
+my-app/test-results/
+my-app/src/renderer/**/.vite/
+my-app/python/dist/
+my-app/python/build/
+my-app/python/__pycache__/
+my-app/python/**/__pycache__/
+my-app/python/.pytest_cache/
+my-app/python/**/*.pyc
+
+# Logs
+*.log
+my-app/logs/
+
+# Test results / debug captures (ephemeral)
+my-app/tests/results/
+my-app/tests/debug/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+my-app/.env
+my-app/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+
+# Tooling state
 .omc/
+
+# Ephemeral track handoff docs (repo root)
+.track-*.md
+.track-*.txt
+
+# Temp
+/tmp/*
