@@ -107,12 +107,14 @@ tasks:
   agent:ps:
     desc: List running agent task containers
     cmds:
-      - docker ps --filter "name=agent-" --format "table {{.Names}}\t{{.Status}}\t{{.RunningFor}}"
+      - docker ps --filter "name=agent-"
 
   agent:logs:
-    desc: Tail logs for a specific agent task container (usage: task agent:logs -- <container-name>)
+    desc: Tail logs for a specific agent task container (usage: task agent:logs TASK=container-name)
+    vars:
+      TASK: '{{.TASK}}'
     cmds:
-      - docker logs -f {{.CLI_ARGS}}
+      - docker logs -f "{{.TASK}}"
 
   # ----- quality gates ------------------------------------------------------
 
