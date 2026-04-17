@@ -1,0 +1,221 @@
+{
+  "$metadata": {
+    "tokenSetOrder": ["shell", "onboarding", "shared"]
+  },
+  "shell": {
+    "colors": {
+      "bg": {
+        "base":    { "value": "#0a0a0d", "type": "color", "description": "Root window background" },
+        "elevated":{ "value": "#111114", "type": "color", "description": "Raised surfaces — tab bar, sidebar" },
+        "overlay": { "value": "#16161a", "type": "color", "description": "Overlays, pill, active tab" },
+        "sunken":  { "value": "#070709", "type": "color", "description": "Recessed wells, input backgrounds" }
+      },
+      "fg": {
+        "primary":  { "value": "#f0f0f2", "type": "color", "description": "Primary text, active labels" },
+        "secondary":{ "value": "#8a8f98", "type": "color", "description": "Secondary text, inactive tabs" },
+        "tertiary": { "value": "#6e737d", "type": "color", "description": "Section headers, placeholders — WCAG 3.79:1 on bg-overlay" },
+        "disabled": { "value": "#3a3f48", "type": "color", "description": "Disabled controls" },
+        "inverse":  { "value": "#0a0a0d", "type": "color", "description": "Text on accent backgrounds" }
+      },
+      "border": {
+        "subtle":  { "value": "#1e1e24", "type": "color", "description": "Tab strip underlines, dividers" },
+        "default": { "value": "#282830", "type": "color", "description": "Input borders, card outlines" },
+        "strong":  { "value": "#3a3a44", "type": "color", "description": "Emphasized separators" }
+      },
+      "accent": {
+        "default": { "value": "#c8f135",              "type": "color", "description": "Primary CTA, active state indicator — neon yellow-green" },
+        "hover":   { "value": "#d4f74e",              "type": "color", "description": "Hover state of accent elements" },
+        "active":  { "value": "#b8e020",              "type": "color", "description": "Pressed/active state" },
+        "subtle":  { "value": "rgba(200, 241, 53, 0.1)",  "type": "color", "description": "Selected row backgrounds" },
+        "glow":    { "value": "rgba(200, 241, 53, 0.18)", "type": "color", "description": "Glow ring on focused inputs, pill border" }
+      },
+      "status": {
+        "success": { "value": "#4ade80", "type": "color", "description": "Connected, completed, ok" },
+        "warning": { "value": "#f59e0b", "type": "color", "description": "Degraded, needs attention" },
+        "error":   { "value": "#f87171", "type": "color", "description": "Error, disconnected, failed" },
+        "info":    { "value": "#60a5fa", "type": "color", "description": "Informational, in-progress" }
+      },
+      "surface": {
+        "glass": { "value": "rgba(22, 22, 26, 0.85)", "type": "color", "description": "Frosted glass panels" },
+        "scrim": { "value": "rgba(0, 0, 0, 0.6)",     "type": "color", "description": "Modal/overlay backdrop" }
+      },
+      "tab": {
+        "bg":       { "value": "#111114", "type": "color", "description": "Inactive tab background" },
+        "activeBg": { "value": "#16161a", "type": "color", "description": "Active tab background" },
+        "hoverBg":  { "value": "#14141a", "type": "color", "description": "Hovered tab background" }
+      },
+      "pill": {
+        "bg":     { "value": "#16161a", "type": "color", "description": "Pill overlay background" },
+        "border": { "value": "#2e2e38", "type": "color", "description": "Pill overlay border" }
+      }
+    },
+    "typography": {
+      "fontFamily": {
+        "ui":   { "value": "'Geist', 'Söhne', system-ui, sans-serif",         "type": "fontFamilies", "description": "UI, display, body — shell theme" },
+        "mono": { "value": "'Berkeley Mono', 'JetBrains Mono', ui-monospace, monospace", "type": "fontFamilies", "description": "URLs, code, CDP identifiers" }
+      },
+      "fontSize": {
+        "2xs":  { "value": "10", "type": "fontSizes", "description": "Status labels, badge counts" },
+        "xs":   { "value": "11", "type": "fontSizes", "description": "Key hint chips, metadata" },
+        "sm":   { "value": "12", "type": "fontSizes", "description": "Tab labels, secondary copy, URL bar" },
+        "md":   { "value": "13", "type": "fontSizes", "description": "List rows, compact UI" },
+        "base": { "value": "14", "type": "fontSizes", "description": "Body text, form fields" },
+        "lg":   { "value": "15", "type": "fontSizes", "description": "Subheadings, emphasized body" },
+        "xl":   { "value": "17", "type": "fontSizes", "description": "Section headings" },
+        "2xl":  { "value": "20", "type": "fontSizes", "description": "Page subheadings" },
+        "3xl":  { "value": "24", "type": "fontSizes", "description": "Page headings" },
+        "4xl":  { "value": "30", "type": "fontSizes", "description": "Hero subheadings" },
+        "5xl":  { "value": "38", "type": "fontSizes", "description": "Hero / display headings" }
+      },
+      "fontWeight": {
+        "regular":  { "value": "400", "type": "fontWeights" },
+        "medium":   { "value": "500", "type": "fontWeights" },
+        "semibold": { "value": "600", "type": "fontWeights" },
+        "bold":     { "value": "700", "type": "fontWeights" }
+      },
+      "lineHeight": {
+        "tight":   { "value": "1.2",  "type": "lineHeights", "description": "Display headings" },
+        "snug":    { "value": "1.35", "type": "lineHeights", "description": "Subheadings" },
+        "normal":  { "value": "1.45", "type": "lineHeights", "description": "Body text (shell)" },
+        "relaxed": { "value": "1.6",  "type": "lineHeights", "description": "Long-form prose (shell)" }
+      }
+    }
+  },
+  "onboarding": {
+    "colors": {
+      "bg": {
+        "base":    { "value": "#1a1a1f", "type": "color", "description": "Onboarding root background — warmer dark" },
+        "elevated":{ "value": "#22222a", "type": "color", "description": "Cards, modals" },
+        "overlay": { "value": "#2a2a34", "type": "color", "description": "Dropdowns, tooltips" },
+        "card":    { "value": "#1e1e26", "type": "color", "description": "Content cards" }
+      },
+      "fg": {
+        "primary":  { "value": "#f2f0ee", "type": "color" },
+        "secondary":{ "value": "#9a96a0", "type": "color" },
+        "tertiary": { "value": "#7a7580", "type": "color", "description": "WCAG 3.52:1 on bg-elevated" }
+      },
+      "border": {
+        "subtle":  { "value": "#2a2a34", "type": "color" },
+        "default": { "value": "#34343f", "type": "color" },
+        "strong":  { "value": "#44444f", "type": "color" }
+      },
+      "accent": {
+        "default": { "value": "#c8f135",               "type": "color", "description": "Primary action — shared with shell" },
+        "hover":   { "value": "#d4f74e",               "type": "color" },
+        "subtle":  { "value": "rgba(200, 241, 53, 0.12)", "type": "color" }
+      },
+      "pill": {
+        "research":      { "value": "#a78bfa",               "type": "color", "description": "Purple" },
+        "researchBg":    { "value": "rgba(167, 139, 250, 0.18)", "type": "color" },
+        "sourcing":      { "value": "#fbbf24",               "type": "color", "description": "Yellow/amber" },
+        "sourcingBg":    { "value": "rgba(251, 191, 36, 0.18)",  "type": "color" },
+        "automation":    { "value": "#34d399",               "type": "color", "description": "Green" },
+        "automationBg":  { "value": "rgba(52, 211, 153, 0.18)",  "type": "color" },
+        "emails":        { "value": "#60a5fa",               "type": "color", "description": "Blue" },
+        "emailsBg":      { "value": "rgba(96, 165, 250, 0.18)",  "type": "color" },
+        "scraping":      { "value": "#f87171",               "type": "color", "description": "Red" },
+        "scrapingBg":    { "value": "rgba(248, 113, 113, 0.18)", "type": "color" },
+        "more":          { "value": "#fb923c",               "type": "color", "description": "Orange" },
+        "moreBg":        { "value": "rgba(251, 146, 60, 0.18)",  "type": "color" }
+      },
+      "mascot": {
+        "body":      { "value": "#7fb3d0", "type": "color", "description": "Blue-grey character fill" },
+        "shadow":    { "value": "#5a9abf", "type": "color", "description": "Underside shadow" },
+        "eye":       { "value": "#1a1a2e", "type": "color", "description": "Eye fill" },
+        "highlight": { "value": "#b0d4e8", "type": "color", "description": "Specular highlight" }
+      },
+      "modal": {
+        "bg":     { "value": "#22222a",               "type": "color" },
+        "border": { "value": "#34343f",               "type": "color" },
+        "scrim":  { "value": "rgba(10, 10, 13, 0.75)", "type": "color" }
+      },
+      "status": {
+        "success": { "value": "#4ade80", "type": "color" },
+        "error":   { "value": "#f87171", "type": "color" }
+      },
+      "google": {
+        "gmail":    { "value": "#ea4335", "type": "color" },
+        "calendar": { "value": "#4285f4", "type": "color" },
+        "sheets":   { "value": "#34a853", "type": "color" },
+        "drive":    { "value": "#fbbc05", "type": "color" },
+        "docs":     { "value": "#1967d2", "type": "color" }
+      }
+    },
+    "typography": {
+      "fontFamily": {
+        "brand": { "value": "'Instrument Serif', Georgia, serif", "type": "fontFamilies", "description": "Hero headlines, wordmark, onboarding headlines only — NOT UI controls" },
+        "ui":    { "value": "'Geist', 'Söhne', system-ui, sans-serif", "type": "fontFamilies" },
+        "mono":  { "value": "'Berkeley Mono', 'JetBrains Mono', ui-monospace, monospace", "type": "fontFamilies" }
+      },
+      "lineHeight": {
+        "normal":  { "value": "1.5",  "type": "lineHeights", "description": "Body text (onboarding — slightly looser than shell)" },
+        "relaxed": { "value": "1.65", "type": "lineHeights", "description": "Long-form prose (onboarding)" }
+      }
+    }
+  },
+  "shared": {
+    "spacing": {
+      "0":  { "value": "0",   "type": "spacing", "description": "No spacing" },
+      "1":  { "value": "2",   "type": "spacing", "description": "Icon gap minimum" },
+      "2":  { "value": "4",   "type": "spacing", "description": "Tight inline gap" },
+      "3":  { "value": "6",   "type": "spacing", "description": "Icon-to-label gap" },
+      "4":  { "value": "8",   "type": "spacing", "description": "Compact padding" },
+      "5":  { "value": "12",  "type": "spacing", "description": "Standard gap" },
+      "6":  { "value": "16",  "type": "spacing", "description": "Section internal padding" },
+      "7":  { "value": "20",  "type": "spacing", "description": "Card padding" },
+      "8":  { "value": "24",  "type": "spacing", "description": "Section gap" },
+      "9":  { "value": "32",  "type": "spacing", "description": "Large section gap" },
+      "10": { "value": "40",  "type": "spacing", "description": "Layout breathing room" },
+      "11": { "value": "48",  "type": "spacing", "description": "Section heading spacing" },
+      "12": { "value": "64",  "type": "spacing", "description": "Page section gap" },
+      "13": { "value": "80",  "type": "spacing", "description": "Hero section padding" },
+      "14": { "value": "96",  "type": "spacing", "description": "Large layout spacing" },
+      "15": { "value": "128", "type": "spacing", "description": "Max layout gap" }
+    },
+    "radii": {
+      "none": { "value": "0",    "type": "borderRadius", "description": "Sharp corners — tables, inset elements" },
+      "xs":   { "value": "3",    "type": "borderRadius", "description": "Key hint chips, badges" },
+      "sm":   { "value": "5",    "type": "borderRadius", "description": "Tabs, nav buttons, list row hover" },
+      "md":   { "value": "7",    "type": "borderRadius", "description": "Inputs, URL bar, buttons" },
+      "lg":   { "value": "10",   "type": "borderRadius", "description": "Cards" },
+      "xl":   { "value": "14",   "type": "borderRadius", "description": "Pill overlay, modals" },
+      "2xl":  { "value": "18",   "type": "borderRadius", "description": "Large cards" },
+      "3xl":  { "value": "24",   "type": "borderRadius", "description": "Hero cards, onboarding panels" },
+      "full": { "value": "9999", "type": "borderRadius", "description": "Circular avatars, toggle thumbs" }
+    },
+    "motion": {
+      "duration": {
+        "instant":  { "value": "0",   "type": "other", "description": "No animation — reduced-motion, skip" },
+        "fast":     { "value": "80",  "type": "other", "description": "Hover color changes, tab switches" },
+        "normal":   { "value": "150", "type": "other", "description": "Button states, input focus rings" },
+        "moderate": { "value": "220", "type": "other", "description": "Sidebar expand/collapse, dropdowns" },
+        "slow":     { "value": "350", "type": "other", "description": "Page transitions, modal enter/exit" },
+        "crawl":    { "value": "500", "type": "other", "description": "Pulse animations, mascot idle loops" }
+      },
+      "easing": {
+        "standard":   { "value": "cubic-bezier(0.2, 0, 0, 1)",       "type": "other", "description": "Default — fast out, authoritative" },
+        "decelerate": { "value": "cubic-bezier(0, 0, 0.2, 1)",        "type": "other", "description": "Element enters screen — starts fast, settles" },
+        "accelerate": { "value": "cubic-bezier(0.4, 0, 1, 1)",        "type": "other", "description": "Element leaves screen — starts slow, exits fast" },
+        "spring":     { "value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "type": "other", "description": "Playful overshoot — mascot entrance, success state" }
+      }
+    },
+    "semantic": {
+      "focusRing": { "value": "0 0 0 2px {shell.colors.accent.default}", "type": "boxShadow", "description": "Keyboard focus ring on interactive elements" },
+      "glow":      { "value": "0 0 12px {shell.colors.accent.glow}",     "type": "boxShadow", "description": "Pill border, focused URL bar" },
+      "shadowSm":  { "value": "0 1px 3px rgba(0, 0, 0, 0.4)",           "type": "boxShadow", "description": "Card elevation — onboarding only; none in shell" },
+      "shadowMd":  { "value": "0 4px 12px rgba(0, 0, 0, 0.5)",          "type": "boxShadow", "description": "Modal elevation — onboarding only" },
+      "shadowLg":  { "value": "0 8px 32px rgba(0, 0, 0, 0.6)",          "type": "boxShadow", "description": "Fullscreen overlay elevation — onboarding only" }
+    },
+    "zIndex": {
+      "base":     { "value": "0",   "type": "other", "description": "Default document flow" },
+      "raised":   { "value": "10",  "type": "other", "description": "Sticky headers, floating labels" },
+      "dropdown": { "value": "100", "type": "other", "description": "Dropdowns, autocomplete" },
+      "sticky":   { "value": "200", "type": "other", "description": "Sticky nav, tab strip" },
+      "overlay":  { "value": "300", "type": "other", "description": "Drawers, side panels" },
+      "modal":    { "value": "400", "type": "other", "description": "Dialog/modal windows" },
+      "toast":    { "value": "500", "type": "other", "description": "Toast notifications" },
+      "pill":     { "value": "600", "type": "other", "description": "Cmd+K pill overlay" },
+      "tooltip":  { "value": "700", "type": "other", "description": "Tooltip — always on top" }
+    }
+  }
+}
