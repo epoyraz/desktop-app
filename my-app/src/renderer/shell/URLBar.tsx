@@ -14,6 +14,9 @@ import React, {
 // ---------------------------------------------------------------------------
 const SECURE_RE = /^https:\/\//i;
 const INSECURE_RE = /^http:\/\//i;
+// New-tab data: URLs and about:blank are internal placeholders; the omnibox
+// renders them as empty so the "Search or enter address" placeholder shows.
+const BLANK_RE = /^(data:|about:blank$)/i;
 
 interface URLBarProps {
   url: string;
@@ -30,6 +33,8 @@ function getSecurityStatus(url: string): 'secure' | 'insecure' | 'none' {
 }
 
 function displayUrl(url: string): string {
+  // New-tab / about:blank: omnibox reads empty so placeholder shows.
+  if (!url || BLANK_RE.test(url)) return '';
   // Show clean URL without protocol for https
   if (SECURE_RE.test(url)) {
     try {
@@ -71,8 +76,9 @@ export function URLBar({
 
   const handleFocus = useCallback(() => {
     setIsEditing(true);
-    // Show full URL when editing
-    setInputValue(url);
+    // On focus, show the full URL so the user can edit it — except for blank
+    // new-tab placeholders, where the input stays empty so typing is fresh.
+    setInputValue(BLANK_RE.test(url) ? '' : url);
     inputRef.current?.select();
   }, [url]);
 

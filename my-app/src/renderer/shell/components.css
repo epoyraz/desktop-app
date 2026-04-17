@@ -100,7 +100,7 @@
   min-width: 60px;
   max-width: var(--tab-max-width);
   flex: 0 1 var(--tab-max-width);
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 8px 8px 0 0;
   background: var(--color-tab-inactive);
@@ -138,24 +138,15 @@
   color: var(--color-fg-primary);
 }
 
-/* Active tab: chrome stays flat, so the indicator is a 2px accent underline
-   anchored at the tab's bottom edge. Inset 10px on each side so it reads as a
-   pill-underline, not a full-width bar. Text goes primary for legibility. */
+/* Active tab bg matches the toolbar bg — the tab visually merges down into
+   the toolbar (classic Chrome). Tab row is --bg-base (darker) so the active
+   tab also reads as visibly "lifted" relative to its siblings. No accent
+   underline: Chrome doesn't have one, and the bg contrast already signals
+   active state. */
 .tab-item--active,
 .tab-item--active:hover {
   background: var(--color-tab-active);
   color: var(--color-fg-primary);
-}
-
-.tab-item--active::after {
-  content: '';
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 2px;
-  background: var(--color-accent-default);
-  border-radius: 1px 1px 0 0;
 }
 
 .tab-item--drag-over {

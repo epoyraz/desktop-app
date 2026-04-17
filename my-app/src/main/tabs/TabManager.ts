@@ -29,7 +29,8 @@ const NEW_TAB_URL =
       '<style>html,body{margin:0;height:100vh;background:#0a0a0d}</style>' +
       '</head><body></body></html>',
   );
-const CHROME_HEIGHT = 72; // shell toolbar height in pixels
+// Must stay in sync with --chrome-height in shell.css (tab row 40 + toolbar 36).
+const CHROME_HEIGHT = 76;
 const BLOCKED_SCHEMES = /^(javascript|file|data|vbscript):/i;
 
 export interface TabState {
