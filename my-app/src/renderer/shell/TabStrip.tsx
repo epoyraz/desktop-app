@@ -72,7 +72,7 @@ function TabItem({
         {tab.isLoading ? (
           <span className="tab-item__spinner" />
         ) : tab.favicon ? (
-          <img src={tab.favicon} alt="" width={14} height={14} />
+          <img src={tab.favicon} alt="" width={14} height={14} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         ) : (
           <span className="tab-item__favicon-placeholder" />
         )}
