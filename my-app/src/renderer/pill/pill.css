@@ -112,26 +112,22 @@ body {
     box-shadow   var(--duration-normal, 180ms) var(--ease-out, cubic-bezier(0.2, 0, 0, 1));
 }
 
-/* Focused state — accent border glow */
+/* Focused state — subtle neutral border lift. The accent color reads as
+   a broken yellow rectangle on the dark pill; use white-alpha instead. */
 .pill-container[data-state="focused"] {
-  /* why-not-a-token: accent at 35% alpha is the focused border state constant.
-     --color-accent-glow is 18% alpha (for glow rings); 35% is stronger,
-     used here for the border itself. A dedicated --color-pill-border-focus
-     would be correct but is pill-internal. */
-  border-color: rgba(200, 241, 53, 0.35);
+  border-color: rgba(255, 255, 255, 0.14);
   box-shadow:
     0 12px 48px rgba(0, 0, 0, 0.50),
-    var(--glow-accent-sm, 0 0 8px rgba(200, 241, 53, 0.12)),
-    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    0 1px 0 rgba(255, 255, 255, 0.05) inset;
 }
 
-/* Streaming state — stronger accent glow signals active agent work */
+/* Streaming state — accent is reserved for the dot pulse + progress bar.
+   Border stays neutral so the pill doesn't look "alarmed" while working. */
 .pill-container[data-state="streaming"] {
-  border-color: rgba(200, 241, 53, 0.28);
+  border-color: rgba(255, 255, 255, 0.12);
   box-shadow:
     0 12px 48px rgba(0, 0, 0, 0.55),
-    var(--glow-accent-md, 0 0 16px rgba(200, 241, 53, 0.20)),
-    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    0 1px 0 rgba(255, 255, 255, 0.05) inset;
 }
 
 /* Done/error state — neutral, no glow, result is prominent */

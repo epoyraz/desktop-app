@@ -43,7 +43,10 @@
   --color-text-tertiary: var(--color-fg-tertiary);
   --color-accent:        var(--color-accent-default);
   --color-danger:        var(--color-status-danger);
-  --color-tab-active:    var(--color-bg-overlay);
+  /* Active tab needs visible contrast against the tab row bg (--bg-elevated = #111114).
+     --bg-overlay at #16161a is only 5 hex units lighter — imperceptible.
+     Use --slate-8 (#282830) so the active tab clearly stands out, Chrome-style. */
+  --color-tab-active:    var(--slate-8);
   --color-tab-inactive:  transparent;
   --color-loading:       var(--color-accent-default);
 

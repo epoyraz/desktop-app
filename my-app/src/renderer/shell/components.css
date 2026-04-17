@@ -116,9 +116,10 @@
   color: var(--color-fg-primary);
 }
 
-/* Active tab: lighter bg + accent underline at bottom */
+/* Active tab: lighter bg — uses --color-tab-active alias (shell.css) which is
+   intentionally brighter than --bg-overlay for real Chrome-like contrast. */
 .tab-item--active {
-  background: var(--color-bg-overlay);
+  background: var(--color-tab-active);
   color: var(--color-fg-primary);
 }
 
