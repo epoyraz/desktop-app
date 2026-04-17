@@ -1,0 +1,317 @@
+/*
+ * theme.global.css — reset + shared utilities
+ * Imported once at renderer entry. Both themes layer on top of this.
+ * Theme switching: set data-theme="shell" or data-theme="onboarding" on <html>.
+ * Rule: zero !important, zero Inter references, zero left-outline emphasis.
+ */
+
+/* ---------------------------------------------------------------------------
+   Reset
+--------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-fg-primary);
+  background-color: var(--color-bg-base);
+  overflow: hidden;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-fg-tertiary);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Focus management — keyboard-only focus ring, no mouse ring
+--------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-default);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Scrollbar — minimal, theme-aware
+--------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-tertiary);
+}
+
+/* ---------------------------------------------------------------------------
+   Typography utilities (reusable across both themes)
+--------------------------------------------------------------------------- */
+
+.text-2xs  { font-size: var(--font-size-2xs); }
+.text-xs   { font-size: var(--font-size-xs); }
+.text-sm   { font-size: var(--font-size-sm); }
+.text-md   { font-size: var(--font-size-md); }
+.text-base { font-size: var(--font-size-base); }
+.text-lg   { font-size: var(--font-size-lg); }
+.text-xl   { font-size: var(--font-size-xl); }
+.text-2xl  { font-size: var(--font-size-2xl); }
+.text-3xl  { font-size: var(--font-size-3xl); }
+
+.font-regular  { font-weight: var(--font-weight-regular); }
+.font-medium   { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-bold     { font-weight: var(--font-weight-bold); }
+
+.text-primary   { color: var(--color-fg-primary); }
+.text-secondary { color: var(--color-fg-secondary); }
+.text-tertiary  { color: var(--color-fg-tertiary); }
+.text-disabled  { color: var(--color-fg-disabled); }
+.text-accent    { color: var(--color-accent-default); }
+.text-mono      { font-family: var(--font-mono); }
+
+/* ---------------------------------------------------------------------------
+   Layout utilities
+--------------------------------------------------------------------------- */
+
+.flex         { display: flex; }
+.flex-col     { display: flex; flex-direction: column; }
+.flex-center  { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-start   { display: flex; align-items: center; justify-content: flex-start; }
+.flex-end     { display: flex; align-items: center; justify-content: flex-end; }
+.flex-1       { flex: 1; }
+.flex-shrink-0 { flex-shrink: 0; }
+
+.grid         { display: grid; }
+.relative     { position: relative; }
+.absolute     { position: absolute; }
+.sticky       { position: sticky; }
+.inset-0      { inset: 0; }
+.overflow-hidden { overflow: hidden; }
+.overflow-auto   { overflow: auto; }
+.w-full       { width: 100%; }
+.h-full       { height: 100%; }
+.min-w-0      { min-width: 0; }
+
+/* ---------------------------------------------------------------------------
+   Spacing utilities — gap, padding, margin
+   Follows the token scale: 1=2px, 2=4px, 3=6px, 4=8px, 5=12px, 6=16px, etc.
+--------------------------------------------------------------------------- */
+
+.gap-1 { gap: 2px; }
+.gap-2 { gap: 4px; }
+.gap-3 { gap: 6px; }
+.gap-4 { gap: 8px; }
+.gap-5 { gap: 12px; }
+.gap-6 { gap: 16px; }
+.gap-7 { gap: 20px; }
+.gap-8 { gap: 24px; }
+.gap-9 { gap: 32px; }
+
+.p-2 { padding: 4px; }
+.p-3 { padding: 6px; }
+.p-4 { padding: 8px; }
+.p-5 { padding: 12px; }
+.p-6 { padding: 16px; }
+.p-7 { padding: 20px; }
+.p-8 { padding: 24px; }
+
+.px-2 { padding-inline: 4px; }
+.px-3 { padding-inline: 6px; }
+.px-4 { padding-inline: 8px; }
+.px-5 { padding-inline: 12px; }
+.px-6 { padding-inline: 16px; }
+
+.py-1 { padding-block: 2px; }
+.py-2 { padding-block: 4px; }
+.py-3 { padding-block: 6px; }
+.py-4 { padding-block: 8px; }
+.py-5 { padding-block: 12px; }
+
+/* ---------------------------------------------------------------------------
+   Surface utilities
+--------------------------------------------------------------------------- */
+
+.rounded-xs   { border-radius: var(--radius-xs); }
+.rounded-sm   { border-radius: var(--radius-sm); }
+.rounded-md   { border-radius: var(--radius-md); }
+.rounded-lg   { border-radius: var(--radius-lg); }
+.rounded-xl   { border-radius: var(--radius-xl); }
+.rounded-2xl  { border-radius: var(--radius-2xl); }
+.rounded-full { border-radius: var(--radius-full); }
+
+.border         { border: 1px solid var(--color-border-default); }
+.border-subtle  { border: 1px solid var(--color-border-subtle); }
+.border-strong  { border: 1px solid var(--color-border-strong); }
+
+.bg-base       { background-color: var(--color-bg-base); }
+.bg-elevated   { background-color: var(--color-bg-elevated); }
+.bg-overlay    { background-color: var(--color-bg-overlay); }
+
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+/* ---------------------------------------------------------------------------
+   Interactive state helpers
+--------------------------------------------------------------------------- */
+
+.interactive {
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    border-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard);
+}
+
+.interactive:hover {
+  background-color: var(--color-bg-elevated);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Screen-reader-only visually hidden text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Animation keyframes — shared across both themes
+--------------------------------------------------------------------------- */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px var(--color-accent-glow); }
+  50%       { box-shadow: 0 0 16px var(--color-accent-glow); }
+}
+
+@keyframes mascot-float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes mascot-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95%            { transform: scaleY(0.1); }
+}
+
+/* Animation utility classes */
+.animate-fade-in   { animation: fade-in var(--duration-normal) var(--ease-decelerate) forwards; }
+.animate-slide-up  { animation: slide-up var(--duration-moderate) var(--ease-decelerate) forwards; }
+.animate-scale-in  { animation: scale-in var(--duration-moderate) var(--ease-spring) forwards; }
+.animate-spin      { animation: spin 1s linear infinite; }
+
+/* Stagger helper for lists */
+.stagger-1 { animation-delay: 40ms; }
+.stagger-2 { animation-delay: 80ms; }
+.stagger-3 { animation-delay: 120ms; }
+.stagger-4 { animation-delay: 160ms; }
+.stagger-5 { animation-delay: 200ms; }
+.stagger-6 { animation-delay: 240ms; }

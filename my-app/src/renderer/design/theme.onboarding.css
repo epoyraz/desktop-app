@@ -1,0 +1,669 @@
+/*
+ * theme.onboarding.css — warm character-forward onboarding palette
+ * Activate by setting <html data-theme="onboarding"> on the document element.
+ * More rounded, more generous padding, pastel capability pills, mascot-forward.
+ * Rule: zero !important, zero Inter references, zero left-outline emphasis.
+ */
+
+/* ---------------------------------------------------------------------------
+   Token constants (named references for readability — see tokens.ts mirrors)
+--------------------------------------------------------------------------- */
+
+/* BG_BASE           #1a1a1f */
+/* BG_ELEVATED       #22222a */
+/* BG_OVERLAY        #2a2a34 */
+/* BG_CARD           #1e1e26 */
+/* FG_PRIMARY        #f2f0ee */
+/* FG_SECONDARY      #9a96a0 */
+/* ACCENT            #c8f135 */
+/* PILL_PURPLE       #a78bfa  bg rgba(167,139,250,0.18) */
+/* PILL_YELLOW       #fbbf24  bg rgba(251,191,36,0.18) */
+/* PILL_GREEN        #34d399  bg rgba(52,211,153,0.18) */
+/* PILL_BLUE         #60a5fa  bg rgba(96,165,250,0.18) */
+/* PILL_RED          #f87171  bg rgba(248,113,113,0.18) */
+/* PILL_ORANGE       #fb923c  bg rgba(251,146,60,0.18) */
+/* MASCOT_BODY       #7fb3d0 */
+
+/* ---------------------------------------------------------------------------
+   Onboarding CSS custom properties
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] {
+  /* -- Font families -- */
+  --font-ui:   'Geist', 'Söhne', system-ui, sans-serif;
+  --font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* -- Font sizes -- */
+  --font-size-2xs:  10px;
+  --font-size-xs:   11px;
+  --font-size-sm:   12px;
+  --font-size-md:   13px;
+  --font-size-base: 14px;
+  --font-size-lg:   15px;
+  --font-size-xl:   17px;
+  --font-size-2xl:  20px;
+  --font-size-3xl:  24px;
+  --font-size-4xl:  30px;
+  --font-size-5xl:  38px;
+
+  /* -- Line heights -- */
+  --line-height-tight:   1.2;
+  --line-height-snug:    1.35;
+  --line-height-normal:  1.5;
+  --line-height-relaxed: 1.65;
+
+  /* -- Font weights -- */
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* -- Backgrounds (warmer dark) -- */
+  --color-bg-base:     #1a1a1f;
+  --color-bg-elevated: #22222a;
+  --color-bg-overlay:  #2a2a34;
+  --color-bg-card:     #1e1e26;
+
+  /* -- Foregrounds -- */
+  --color-fg-primary:   #f2f0ee;
+  --color-fg-secondary: #9a96a0;
+  --color-fg-tertiary:  #6a6570;
+  --color-fg-disabled:  #4a4550;
+  --color-fg-inverse:   #1a1a1f;
+
+  /* -- Borders -- */
+  --color-border-subtle:  #2a2a34;
+  --color-border-default: #34343f;
+  --color-border-strong:  #44444f;
+
+  /* -- Primary accent -- */
+  --color-accent-default: #c8f135;
+  --color-accent-hover:   #d4f74e;
+  --color-accent-active:  #b8e020;
+  --color-accent-subtle:  rgba(200, 241, 53, 0.12);
+  --color-accent-glow:    rgba(200, 241, 53, 0.20);
+
+  /* -- Status -- */
+  --color-status-success: #4ade80;
+  --color-status-warning: #f59e0b;
+  --color-status-error:   #f87171;
+  --color-status-info:    #60a5fa;
+
+  /* -- Capability pill colors -- */
+  --color-pill-research:    #a78bfa;
+  --color-pill-research-bg: rgba(167, 139, 250, 0.18);
+  --color-pill-sourcing:    #fbbf24;
+  --color-pill-sourcing-bg: rgba(251, 191, 36, 0.18);
+  --color-pill-automation:  #34d399;
+  --color-pill-automation-bg: rgba(52, 211, 153, 0.18);
+  --color-pill-emails:      #60a5fa;
+  --color-pill-emails-bg:   rgba(96, 165, 250, 0.18);
+  --color-pill-scraping:    #f87171;
+  --color-pill-scraping-bg: rgba(248, 113, 113, 0.18);
+  --color-pill-more:        #fb923c;
+  --color-pill-more-bg:     rgba(251, 146, 60, 0.18);
+
+  /* -- Mascot palette -- */
+  --color-mascot-body:      #7fb3d0;
+  --color-mascot-shadow:    #5a9abf;
+  --color-mascot-eye:       #1a1a2e;
+  --color-mascot-highlight: #b0d4e8;
+
+  /* -- Modal surface -- */
+  --color-modal-bg:     #22222a;
+  --color-modal-border: #34343f;
+  --color-modal-scrim:  rgba(10, 10, 13, 0.75);
+
+  /* -- Google service colors -- */
+  --color-google-gmail:    #ea4335;
+  --color-google-calendar: #4285f4;
+  --color-google-sheets:   #34a853;
+  --color-google-drive:    #fbbc05;
+  --color-google-docs:     #1967d2;
+
+  /* -- Border radii (more rounded for warmth) -- */
+  --radius-none: 0px;
+  --radius-xs:   4px;
+  --radius-sm:   7px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   18px;
+  --radius-2xl:  24px;
+  --radius-3xl:  32px;
+  --radius-full: 9999px;
+
+  /* -- Durations (slightly more leisurely) -- */
+  --duration-instant:  0ms;
+  --duration-fast:     100ms;
+  --duration-normal:   180ms;
+  --duration-moderate: 260ms;
+  --duration-slow:     380ms;
+  --duration-crawl:    550ms;
+
+  /* -- Easings -- */
+  --ease-standard:   cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* -- Shadows (warmer, subtler) -- */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.55);
+  --glow-accent: 0 0 16px rgba(200, 241, 53, 0.20);
+
+  /* -- Z-index layers -- */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-dropdown: 100;
+  --z-sticky:   200;
+  --z-overlay:  300;
+  --z-modal:    400;
+  --z-toast:    500;
+  --z-pill:     600;
+  --z-tooltip:  700;
+}
+
+/* ---------------------------------------------------------------------------
+   Onboarding layout containers
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .onboarding-root {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-bg-base);
+  overflow: hidden;
+}
+
+/* Left panel — copy + interactive elements */
+[data-theme="onboarding"] .onboarding-panel-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 40px;
+  width: 56%;
+  gap: 24px;
+}
+
+/* Right panel — mascot stage */
+[data-theme="onboarding"] .onboarding-panel-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44%;
+  background-color: var(--color-bg-card);
+  border-left: 1px solid var(--color-border-subtle);
+  position: relative;
+}
+
+/* ---------------------------------------------------------------------------
+   Step indicator (1/5 dots)
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-theme="onboarding"] .step-dot {
+  width: 24px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border-strong);
+  transition: background-color var(--duration-normal) var(--ease-standard),
+              width var(--duration-normal) var(--ease-standard);
+}
+
+[data-theme="onboarding"] .step-dot[data-active="true"] {
+  background-color: var(--color-fg-primary);
+  width: 32px;
+}
+
+[data-theme="onboarding"] .step-dot[data-completed="true"] {
+  background-color: var(--color-status-success);
+}
+
+/* ---------------------------------------------------------------------------
+   Typography — welcome screen
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .onboarding-headline {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-primary);
+  line-height: var(--line-height-tight);
+  letter-spacing: -0.02em;
+}
+
+[data-theme="onboarding"] .onboarding-subhead {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-fg-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+[data-theme="onboarding"] .onboarding-eyebrow {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ---------------------------------------------------------------------------
+   Capability pills — pastel colored, floating layout
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .capability-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 4px;
+}
+
+[data-theme="onboarding"] .capability-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: default;
+  user-select: none;
+  transition: transform var(--duration-fast) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-standard);
+}
+
+[data-theme="onboarding"] .capability-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="research"] {
+  color: var(--color-pill-research);
+  background-color: var(--color-pill-research-bg);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="sourcing"] {
+  color: var(--color-pill-sourcing);
+  background-color: var(--color-pill-sourcing-bg);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="automation"] {
+  color: var(--color-pill-automation);
+  background-color: var(--color-pill-automation-bg);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="emails"] {
+  color: var(--color-pill-emails);
+  background-color: var(--color-pill-emails-bg);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="scraping"] {
+  color: var(--color-pill-scraping);
+  background-color: var(--color-pill-scraping-bg);
+}
+
+[data-theme="onboarding"] .capability-pill[data-variant="more"] {
+  color: var(--color-pill-more);
+  background-color: var(--color-pill-more-bg);
+}
+
+/* ---------------------------------------------------------------------------
+   Name display inline — "I have no name yet"
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .name-placeholder {
+  font-style: italic;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------------------
+   CTA button — "Get Started"
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .cta-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-fg-primary);
+  color: var(--color-fg-inverse);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  user-select: none;
+  border: none;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-standard);
+}
+
+[data-theme="onboarding"] .cta-button:hover {
+  background-color: #e8e8ea;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme="onboarding"] .cta-button:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Mascot stage
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .mascot-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+[data-theme="onboarding"] .mascot-wrapper {
+  animation: mascot-float 3s var(--ease-decelerate) infinite;
+}
+
+[data-theme="onboarding"] .mascot-wrapper[data-state="loading"] {
+  animation: mascot-float 1s var(--ease-decelerate) infinite;
+}
+
+/* Mascot variant row (bottom of onboarding — color/style options) */
+[data-theme="onboarding"] .mascot-variant-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+[data-theme="onboarding"] .mascot-variant-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-spring);
+}
+
+[data-theme="onboarding"] .mascot-variant-thumb:hover,
+[data-theme="onboarding"] .mascot-variant-thumb[data-selected="true"] {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* ---------------------------------------------------------------------------
+   Account creation form
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+[data-theme="onboarding"] .auth-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-theme="onboarding"] .auth-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-secondary);
+}
+
+[data-theme="onboarding"] .auth-input {
+  height: 40px;
+  padding-inline: 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-primary);
+  font-size: var(--font-size-base);
+  transition: border-color var(--duration-normal) var(--ease-standard),
+              box-shadow var(--duration-normal) var(--ease-standard);
+  width: 100%;
+}
+
+[data-theme="onboarding"] .auth-input::placeholder {
+  color: var(--color-fg-tertiary);
+}
+
+[data-theme="onboarding"] .auth-input:focus {
+  border-color: var(--color-accent-default);
+  box-shadow: var(--glow-accent);
+}
+
+[data-theme="onboarding"] .auth-submit {
+  height: 42px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-fg-primary);
+  color: var(--color-fg-inverse);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  border: none;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-spring);
+}
+
+[data-theme="onboarding"] .auth-submit:hover {
+  background-color: #e8e8ea;
+  transform: translateY(-1px);
+}
+
+[data-theme="onboarding"] .auth-submit:active {
+  transform: translateY(0);
+}
+
+[data-theme="onboarding"] .auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+[data-theme="onboarding"] .auth-divider::before,
+[data-theme="onboarding"] .auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border-default);
+}
+
+[data-theme="onboarding"] .google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+
+[data-theme="onboarding"] .google-btn:hover {
+  background-color: var(--color-bg-overlay);
+  border-color: var(--color-border-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   Google services modal
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .modal-scrim {
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-modal-scrim);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in var(--duration-normal) var(--ease-decelerate) forwards;
+}
+
+[data-theme="onboarding"] .modal-panel {
+  background-color: var(--color-modal-bg);
+  border: 1px solid var(--color-modal-border);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  box-shadow: var(--shadow-lg);
+  animation: scale-in var(--duration-moderate) var(--ease-spring) forwards;
+}
+
+[data-theme="onboarding"] .modal-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+  margin-bottom: 4px;
+}
+
+[data-theme="onboarding"] .modal-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-secondary);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: 20px;
+}
+
+[data-theme="onboarding"] .google-service-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 12px;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+  border-radius: var(--radius-sm);
+  padding-inline: 4px;
+}
+
+[data-theme="onboarding"] .google-service-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="onboarding"] .google-service-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+[data-theme="onboarding"] .google-service-info {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-theme="onboarding"] .google-service-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-primary);
+}
+
+[data-theme="onboarding"] .google-service-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-secondary);
+}
+
+[data-theme="onboarding"] .google-service-check {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-border-strong);
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+
+[data-theme="onboarding"] .google-service-check[data-checked="true"] {
+  background-color: var(--color-status-success);
+  border-color: var(--color-status-success);
+}
+
+[data-theme="onboarding"] .modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+[data-theme="onboarding"] .modal-service-divider {
+  height: 1px;
+  background-color: var(--color-border-subtle);
+}
+
+/* ---------------------------------------------------------------------------
+   Terms / legal fine print
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .legal-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-tertiary);
+  line-height: var(--line-height-relaxed);
+  text-align: center;
+}
+
+[data-theme="onboarding"] .legal-text a {
+  color: var(--color-fg-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+[data-theme="onboarding"] .legal-text a:hover {
+  color: var(--color-fg-primary);
+}
+
+/* ---------------------------------------------------------------------------
+   Already have account link
+--------------------------------------------------------------------------- */
+
+[data-theme="onboarding"] .auth-switch {
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-secondary);
+  text-align: center;
+}
+
+[data-theme="onboarding"] .auth-switch button {
+  color: var(--color-fg-primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+[data-theme="onboarding"] .auth-switch button:hover {
+  color: var(--color-accent-default);
+}
