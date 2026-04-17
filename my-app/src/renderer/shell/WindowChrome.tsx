@@ -11,6 +11,7 @@ import { URLBar } from './URLBar';
 import { RecentlyClosedDropdown } from './RecentlyClosedDropdown';
 import { BookmarksBar } from './BookmarksBar';
 import { BookmarkDialog } from './BookmarkDialog';
+import { FindBar } from './FindBar';
 import type {
   TabManagerState,
   TabState,
@@ -403,6 +404,11 @@ export function WindowChrome(): React.ReactElement {
           onClose={() => setBookmarkDialogOpen(false)}
         />
       )}
+
+      {/* Find-in-page overlay. Renders null unless Cmd+F was pressed. The
+          overlay is absolutely positioned by CSS so it floats over content
+          without shifting the chrome layout. */}
+      <FindBar activeTabId={activeTabId} />
     </div>
   );
 }
