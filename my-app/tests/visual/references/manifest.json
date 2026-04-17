@@ -2,7 +2,7 @@
   {
     "state": "onboarding-welcome",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/onboarding-welcome.png",
-    "captured_at": "2026-04-17T12:57:09.686Z",
+    "captured_at": "2026-04-17T18:58:25.449Z",
     "width": 920,
     "height": 640,
     "success": true,
@@ -11,7 +11,7 @@
   {
     "state": "onboarding-naming",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/onboarding-naming.png",
-    "captured_at": "2026-04-17T12:57:11.350Z",
+    "captured_at": "2026-04-17T18:58:27.055Z",
     "width": 920,
     "height": 640,
     "success": true,
@@ -20,7 +20,7 @@
   {
     "state": "onboarding-account",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/onboarding-account.png",
-    "captured_at": "2026-04-17T12:57:13.065Z",
+    "captured_at": "2026-04-17T18:58:28.749Z",
     "width": 920,
     "height": 640,
     "success": true,
@@ -29,7 +29,7 @@
   {
     "state": "onboarding-account-scopes",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/onboarding-account-scopes.png",
-    "captured_at": "2026-04-17T12:57:23.912Z",
+    "captured_at": "2026-04-17T18:58:39.534Z",
     "width": 0,
     "height": 0,
     "success": false,
@@ -38,7 +38,7 @@
   {
     "state": "shell-empty",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/shell-empty.png",
-    "captured_at": "2026-04-17T12:57:25.803Z",
+    "captured_at": "2026-04-17T18:58:41.382Z",
     "width": 1280,
     "height": 800,
     "success": true,
@@ -47,7 +47,7 @@
   {
     "state": "shell-3-tabs",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/shell-3-tabs.png",
-    "captured_at": "2026-04-17T12:57:29.145Z",
+    "captured_at": "2026-04-17T18:58:44.622Z",
     "width": 1280,
     "height": 800,
     "success": true,
@@ -56,16 +56,16 @@
   {
     "state": "pill-idle",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/pill-idle.png",
-    "captured_at": "2026-04-17T12:57:31.326Z",
-    "width": 560,
-    "height": 72,
+    "captured_at": "2026-04-17T18:58:46.704Z",
+    "width": 480,
+    "height": 56,
     "success": true,
     "notes": "Pill — idle, empty input after toggle"
   },
   {
     "state": "pill-streaming",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/pill-streaming.png",
-    "captured_at": "2026-04-17T12:57:33.697Z",
+    "captured_at": "2026-04-17T18:58:48.940Z",
     "width": 1280,
     "height": 800,
     "success": true,
@@ -74,7 +74,7 @@
   {
     "state": "pill-done",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/pill-done.png",
-    "captured_at": "2026-04-17T12:57:36.014Z",
+    "captured_at": "2026-04-17T18:58:51.226Z",
     "width": 1280,
     "height": 800,
     "success": true,
@@ -83,7 +83,7 @@
   {
     "state": "pill-error",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/pill-error.png",
-    "captured_at": "2026-04-17T12:57:38.357Z",
+    "captured_at": "2026-04-17T18:58:53.446Z",
     "width": 1280,
     "height": 800,
     "success": true,
@@ -92,51 +92,46 @@
   {
     "state": "settings-api-key",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-api-key.png",
-    "captured_at": "2026-04-17T12:57:51.306Z",
-    "width": 0,
-    "height": 0,
-    "success": false,
-    "error": "Settings window did not open",
-    "notes": "Settings window not reachable in test env"
+    "captured_at": "2026-04-17T18:58:57.096Z",
+    "width": 720,
+    "height": 560,
+    "success": true,
+    "notes": "Settings — API Key tab"
   },
   {
     "state": "settings-agent",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-agent.png",
-    "captured_at": "2026-04-17T12:58:04.404Z",
-    "width": 0,
-    "height": 0,
-    "success": false,
-    "error": "Settings window did not open",
-    "notes": "Settings window not reachable in test env"
+    "captured_at": "2026-04-17T18:59:00.958Z",
+    "width": 720,
+    "height": 560,
+    "success": true,
+    "notes": "Settings — Agent tab"
   },
   {
     "state": "settings-appearance",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-appearance.png",
-    "captured_at": "2026-04-17T12:58:17.503Z",
-    "width": 0,
-    "height": 0,
-    "success": false,
-    "error": "Settings window did not open",
-    "notes": "Settings window not reachable in test env"
+    "captured_at": "2026-04-17T18:59:04.824Z",
+    "width": 720,
+    "height": 560,
+    "success": true,
+    "notes": "Settings — Appearance tab"
   },
   {
     "state": "settings-scopes",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-scopes.png",
-    "captured_at": "2026-04-17T12:58:30.618Z",
-    "width": 0,
-    "height": 0,
-    "success": false,
-    "error": "Settings window did not open",
-    "notes": "Settings window not reachable in test env"
+    "captured_at": "2026-04-17T18:59:08.628Z",
+    "width": 720,
+    "height": 560,
+    "success": true,
+    "notes": "Settings — Google Scopes tab"
   },
   {
     "state": "settings-danger-zone",
     "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-danger-zone.png",
-    "captured_at": "2026-04-17T12:58:43.728Z",
-    "width": 0,
-    "height": 0,
-    "success": false,
-    "error": "Settings window did not open",
-    "notes": "Settings window not reachable in test env"
+    "captured_at": "2026-04-17T18:59:12.489Z",
+    "width": 720,
+    "height": 560,
+    "success": true,
+    "notes": "Settings — Danger Zone tab"
   }
 ]
