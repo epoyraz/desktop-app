@@ -38,19 +38,50 @@ body {
   align-items: stretch;
 }
 
+/*
+ * Pill visual constants:
+ *   BACKDROP_BLUR     blur(24px) saturate(180%)
+ *   GLASS_BG          rgba(22, 22, 26, 0.93)  — color-bg-elevated at ~93% opacity
+ *   STREAMING_GLOW    0 0 0 1px rgba(200,241,53,0.33), 0 8px 32px rgba(200,241,53,0.11)
+ *   STEP_STAGGER      250ms per step, max 4 visible
+ */
+
 /* ---------------------------------------------------------------------------
- * Pill container — the visible pill shape
+ * Pill container — warm glass pill shape with backdrop blur
  * --------------------------------------------------------------------------- */
 
 .pill-container {
   width: 100%;
-  background: var(--color-bg-elevated, #1a1a1a);
+  /* Warm glass — frosted, elevated, not flat */
+  background: rgba(22, 22, 26, 0.93);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-2xl, 18px);
   box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.6));
   overflow: hidden;
   /* Smooth height transitions as toast/result appear */
-  transition: height var(--duration-normal, 200ms) var(--ease-decelerate, ease-out);
+  transition:
+    height var(--duration-normal, 200ms) var(--ease-decelerate, ease-out),
+    box-shadow var(--duration-normal, 200ms) var(--ease-standard, cubic-bezier(0.2,0,0,1));
+}
+
+/* Streaming state — accent glow ring signals active agent work */
+.pill-container[data-phase="running"],
+.pill-container[data-phase="submitting"] {
+  box-shadow:
+    0 0 0 1px rgba(200, 241, 53, 0.33),
+    0 8px 32px rgba(200, 241, 53, 0.11),
+    0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-container {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--color-bg-elevated, #1a1a1a);
+    transition: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -110,7 +141,7 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
- * Progress toast area
+ * Progress toast area — streaming steps with stagger animation
  * --------------------------------------------------------------------------- */
 
 .pill-toast {
@@ -132,16 +163,48 @@ body {
   letter-spacing: 0.06em;
 }
 
+/* Each step fades in from below — 250ms stagger per step index */
 .pill-toast-step {
   font-size: 13px;
   color: var(--color-fg-primary, #f0f0f0);
   line-height: 1.5;
+  animation: pill-step-in 250ms cubic-bezier(0, 0, 0.2, 1) forwards;
 }
+
+.pill-toast-step:nth-child(1) { animation-delay: 0ms; }
+.pill-toast-step:nth-child(2) { animation-delay: 50ms; }
+.pill-toast-step:nth-child(3) { animation-delay: 100ms; }
+.pill-toast-step:nth-child(4) { animation-delay: 150ms; }
 
 .pill-toast-step-number {
   font-size: 11px;
   color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
   font-variant-numeric: tabular-nums;
+}
+
+/* Empty state — shown when pill is idle with no input */
+.pill-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px 20px;
+  gap: 6px;
+}
+
+.pill-empty-state__copy {
+  font-size: 12px;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
+  text-align: center;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-toast-step {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -230,6 +293,61 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+ * Result action buttons
+ * --------------------------------------------------------------------------- */
+
+.pill-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pill-result-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 5px);
+  background: var(--color-bg-overlay, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
+  color: var(--color-fg-secondary, rgba(255, 255, 255, 0.6));
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+  letter-spacing: 0.01em;
+}
+
+.pill-result-action-btn:hover {
+  background: var(--color-bg-elevated, rgba(255, 255, 255, 0.1));
+  color: var(--color-fg-primary, #f0f0f0);
+  border-color: var(--color-border-strong, rgba(255, 255, 255, 0.2));
+}
+
+.pill-result-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs, 3px);
+  background: transparent;
+  border: none;
+  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
+  cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.pill-result-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-fg-primary, #f0f0f0);
+}
+
+/* ---------------------------------------------------------------------------
  * Animations
  * --------------------------------------------------------------------------- */
 
@@ -237,6 +355,18 @@ body {
   from {
     opacity: 0;
     transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Step enter animation — fade-in-up per step */
+@keyframes pill-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
   to {
     opacity: 1;

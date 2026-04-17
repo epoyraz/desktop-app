@@ -54,6 +54,12 @@ const log = {
 };
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const EMPTY_STATE_COPY = 'Cmd+K to give me something to do' as const;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -342,6 +348,13 @@ export function Pill(): React.ReactElement {
           <span className="pill-queued-badge">
             Next: {state.queuedTask}
           </span>
+        </div>
+      )}
+
+      {/* Empty-state copy — shown in idle phase when input is blank */}
+      {state.phase === 'idle' && !state.inputValue && (
+        <div className="pill-empty-state" aria-hidden="true">
+          <p className="pill-empty-state__copy">{EMPTY_STATE_COPY}</p>
         </div>
       )}
     </div>
