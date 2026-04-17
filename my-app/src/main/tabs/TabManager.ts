@@ -142,8 +142,9 @@ export class TabManager {
         if (n > 0) { cmdPort = n; break; }
       }
     }
+    let switchVal = '';
     if (!cmdPort) {
-      const switchVal = app.commandLine.getSwitchValue('remote-debugging-port');
+      switchVal = app.commandLine.getSwitchValue('remote-debugging-port');
       if (switchVal) {
         const n = parseInt(switchVal, 10);
         if (n > 0) cmdPort = n;

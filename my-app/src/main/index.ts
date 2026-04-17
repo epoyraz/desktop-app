@@ -20,7 +20,7 @@ import started from 'electron-squirrel-startup';
 import { createShellWindow } from './window';
 import { TabManager } from './tabs/TabManager';
 // Track B — Pill + hotkeys
-import { createPillWindow, togglePill, hidePill, forwardAgentEvent, getPillWindow } from './pill';
+import { createPillWindow, togglePill, hidePill, forwardAgentEvent, getPillWindow, setPillHeight, PILL_HEIGHT_COLLAPSED, PILL_HEIGHT_EXPANDED } from './pill';
 import { registerHotkeys, unregisterHotkeys } from './hotkeys';
 import { makeRequest, PROTOCOL_VERSION } from '../shared/types';
 import type { AgentEvent } from '../shared/types';
@@ -259,9 +259,7 @@ app.whenReady().then(async () => {
   // pill:set-expanded — renderer asks the main process to grow/shrink the pill
   // window as palette/stream content toggles. Collapsed = 56, expanded = 320
   ipcMain.handle('pill:set-expanded', (_event, expanded: boolean) => {
-    const { PILL_HEIGHT_COLLAPSED: H_COLLAPSED, PILL_HEIGHT_EXPANDED: H_EXPANDED } = require('./pill') as { PILL_HEIGHT_COLLAPSED: number; PILL_HEIGHT_EXPANDED: number };
-    const { setPillHeight: resize } = require('./pill') as { setPillHeight: (h: number) => void };
-    resize(expanded ? H_EXPANDED : H_COLLAPSED);
+    setPillHeight(expanded ? PILL_HEIGHT_EXPANDED : PILL_HEIGHT_COLLAPSED);
   });
 
   // Track 5 — Settings IPC handlers
