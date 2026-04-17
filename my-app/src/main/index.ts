@@ -37,6 +37,9 @@ import { DaemonClient } from './daemon/client';
 import { startDaemon, stopDaemon, handlePillSubmit, handlePillCancel, _getDaemonPid, _getRestartCount, _getSocketPath } from './daemonLifecycle';
 import { getApiKey } from './agentApiKey';
 import { assertString } from './ipc-validators';
+// Wave HL — in-process TS agent (harnessless port)
+import { handleHlSubmit, handleHlCancel, teardown as teardownHl } from './hlPillBridge';
+import { getEngine, setEngine, type EngineId } from './hl/engine';
 // Track 5 — Settings
 import { openSettingsWindow, closeSettingsWindow, getSettingsWindow } from './settings/SettingsWindow';
 import { registerSettingsHandlers, unregisterSettingsHandlers, openClearDataDialogFromMenu } from './settings/ipc';
@@ -199,10 +202,22 @@ app.whenReady().then(async () => {
       tabManager ? tabManager.getAllTabSummaries() : [],
   });
 
-  // Track 1 IPC: pill:submit — get active CDP URL, send agent_task to daemon
+  // pill:submit — routed via engine flag. hl-inprocess uses the TS port; python-daemon
+  // is the legacy path. Both return { task_id } on success.
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
     const validatedPrompt = assertString(prompt, 'prompt', 10000);
     const account = accountStore.load();
+    const engine = getEngine();
+    mainLogger.info('main.pill:submit', { engine, promptLength: validatedPrompt.length });
+
+    if (engine === 'hl-inprocess') {
+      return handleHlSubmit({
+        prompt: validatedPrompt,
+        getActiveWebContents: () => tabManager?.getActiveWebContents() ?? null,
+        getApiKey: () => getApiKey({ accountEmail: account?.email }),
+      });
+    }
+
     return handlePillSubmit({
       prompt: validatedPrompt,
       getActiveTabCdpUrl: async () => tabManager ? await tabManager.getActiveTabCdpUrl() : null,
@@ -211,9 +226,33 @@ app.whenReady().then(async () => {
     });
   });
 
-  // Track 1 IPC: pill:cancel — cancel a running agent task
+  // pill:cancel — routed via engine flag.
   ipcMain.handle('pill:cancel', async (_event, { task_id }: { task_id: string }) => {
+    const engine = getEngine();
+    mainLogger.info('main.pill:cancel', { engine, task_id });
+    if (engine === 'hl-inprocess') return handleHlCancel(task_id);
     return handlePillCancel({ task_id, daemonClient });
+  });
+
+  // pill:get-tabs — returns the current tab list for the palette's fuzzy search.
+  ipcMain.handle('pill:get-tabs', () => {
+    if (!tabManager) return { tabs: [], activeTabId: null };
+    const s = tabManager.getState();
+    return { tabs: s.tabs, activeTabId: s.activeTabId };
+  });
+
+  // pill:activate-tab — palette "Switch to tab" row action.
+  ipcMain.handle('pill:activate-tab', (_event, { tab_id }: { tab_id: string }) => {
+    if (!tabManager) return;
+    tabManager.activateTab(assertString(tab_id, 'tab_id', 100));
+  });
+
+  // hl:get-engine / hl:set-engine — let the renderer/settings drive the flag flip.
+  ipcMain.handle('hl:get-engine', () => getEngine());
+  ipcMain.handle('hl:set-engine', (_event, { engine }: { engine: string }) => {
+    const e = engine === 'python-daemon' || engine === 'hl-inprocess' ? (engine as EngineId) : 'hl-inprocess';
+    setEngine(e);
+    return e;
   });
 
   // Track B IPC: pill:hide — hide the pill window and notify renderer
@@ -305,10 +344,11 @@ app.whenReady().then(async () => {
 
   // Flush session + bookmarks on quit
   app.on('before-quit', async () => {
-    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + stopping daemon' });
+    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + stopping daemon + hl teardown' });
     tabManager?.flushSession();
     bookmarkStore?.flushSync();
     await stopDaemon();
+    await teardownHl();
   });
 
   // Track B — unregister hotkeys on quit (macOS cleanup)
