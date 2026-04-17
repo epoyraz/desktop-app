@@ -1,21 +1,41 @@
 /*
- * Track B — Pill overlay scoped styles.
+ * pill.css — Dia-influenced command pill, 4-state design.
  *
- * The pill window is transparent + frameless. This CSS:
- * - Resets body/html to transparent (no background bleed)
- * - Provides the pill container shape (rounded pill / capsule)
- * - Handles collapsed (input only) and expanded (input + toast/result) states
- * - Uses CSS custom properties from theme.shell.css (imported in index.tsx)
+ * Design principles:
+ * - Single unified surface — no nested input box, no visible rectangle inside the pill
+ * - State communication via left-dot behavior + border glow only (no rings, no outlines)
+ * - Glass depth: rgba(20,20,22,0.92) + backdrop-filter blur(24px) saturate(180%)
+ * - Typography: --font-ui (Geist) for input, --font-mono (Berkeley Mono) for kbd chip
+ *
+ * States (set via data-state attribute on .pill-container):
+ *   idle       — static accent dot, subtle border, ↵ chip hidden until typing
+ *   focused    — accent border glow, dot static, ↵ chip appears
+ *   streaming  — dot pulses, indeterminate progress bar, pill taller
+ *   done       — ✓/✕ icon replaces dot, fade-in result, 4s auto-dismiss
  *
  * Rules:
- * - No !important (CLAUDE.md constraint)
- * - No Inter font (CLAUDE.md constraint)
- * - No hardcoded hex colors (use CSS vars from design tokens)
+ * - No !important
+ * - No Inter font
  * - No left outline / vibe-coding artifacts
+ * - No redundant input border or ring
  */
 
 /* ---------------------------------------------------------------------------
- * Reset — transparent window requires transparent html/body
+ * Palette constants (named for readability — values from theme.shell.css)
+ *
+ * PILL_BG           rgba(20, 20, 22, 0.92)
+ * PILL_BORDER_IDLE  rgba(255, 255, 255, 0.08)
+ * PILL_BORDER_FOCUS rgba(200, 241, 53, 0.35)
+ * PILL_SHADOW       0 12px 48px rgba(0, 0, 0, 0.5)
+ * ACCENT_HALO       0 0 24px rgba(200, 241, 53, 0.08)
+ * ACCENT            #c8f135
+ * ACCENT_DIM        rgba(200, 241, 53, 0.5)
+ * DANGER            #f87171
+ * SUCCESS           #4ade80
+ * --------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+ * Reset — transparent frameless window
  * --------------------------------------------------------------------------- */
 
 html,
@@ -24,9 +44,9 @@ body {
   padding: 0;
   background: transparent;
   overflow: hidden;
-  /* Geist or system fallback per Track G tokens */
-  font-family: var(--font-ui, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-ui, 'Geist', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   user-select: none;
 }
 
@@ -38,172 +58,328 @@ body {
   align-items: stretch;
 }
 
-/*
- * Pill visual constants:
- *   BACKDROP_BLUR     blur(24px) saturate(180%)
- *   GLASS_BG          rgba(22, 22, 26, 0.93)  — color-bg-elevated at ~93% opacity
- *   STREAMING_GLOW    0 0 0 1px rgba(200,241,53,0.33), 0 8px 32px rgba(200,241,53,0.11)
- *   STEP_STAGGER      250ms per step, max 4 visible
- */
-
 /* ---------------------------------------------------------------------------
- * Pill container — warm glass pill shape with backdrop blur
+ * Pill container — the single unified glass surface
  * --------------------------------------------------------------------------- */
 
 .pill-container {
   width: 100%;
-  /* Warm glass — frosted, elevated, not flat */
-  background: rgba(22, 22, 26, 0.93);
+  position: relative;
+  background: rgba(20, 20, 22, 0.92);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
-  border-radius: var(--radius-2xl, 18px);
-  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.6));
-  overflow: hidden;
-  /* Smooth height transitions as toast/result appear */
-  transition:
-    height var(--duration-normal, 200ms) var(--ease-decelerate, ease-out),
-    box-shadow var(--duration-normal, 200ms) var(--ease-standard, cubic-bezier(0.2,0,0,1));
-}
-
-/* Streaming state — accent glow ring signals active agent work */
-.pill-container[data-phase="running"],
-.pill-container[data-phase="submitting"] {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
   box-shadow:
-    0 0 0 1px rgba(200, 241, 53, 0.33),
-    0 8px 32px rgba(200, 241, 53, 0.11),
-    0 8px 32px rgba(0, 0, 0, 0.6);
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  overflow: hidden;
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow   180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Focused state — accent border glow, no visible ring on the input element */
+.pill-container[data-state="focused"] {
+  border-color: rgba(200, 241, 53, 0.35);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(200, 241, 53, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Streaming state — stronger accent glow signals active agent work */
+.pill-container[data-state="streaming"] {
+  border-color: rgba(200, 241, 53, 0.28);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.55),
+    0 0 32px rgba(200, 241, 53, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Done/error state — neutral, no glow, result is prominent */
+.pill-container[data-state="done"],
+.pill-container[data-state="error"] {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Reduced motion — strip animations, keep static glass bg */
 @media (prefers-reduced-motion: reduce) {
   .pill-container {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: var(--color-bg-elevated, #1a1a1a);
+    background: #141416;
     transition: none;
   }
 }
 
 /* ---------------------------------------------------------------------------
- * Input row — the collapsed state (height 72px)
+ * Input row — 56px collapsed height, single surface
  * --------------------------------------------------------------------------- */
 
 .pill-input-row {
   display: flex;
   align-items: center;
-  height: 72px;
-  padding: 0 20px;
-  gap: 12px;
+  height: 56px;
+  padding: 0 16px 0 18px;
+  gap: 10px;
+  position: relative;
 }
 
-.pill-input-icon {
+/* ---------------------------------------------------------------------------
+ * Left dot — the agent state indicator (8px circle)
+ *   idle/focused:  static, accent color at 70% opacity
+ *   streaming:     pulses accent → accent/50% at 1s ease-in-out
+ *   done:          ✓ icon (accent), 16px
+ *   error:         ✕ icon (danger), 16px
+ * --------------------------------------------------------------------------- */
+
+.pill-dot {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: rgba(200, 241, 53, 0.7);
+  transition: background-color 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pill-container[data-state="streaming"] .pill-dot {
+  animation: pill-dot-pulse 1s ease-in-out infinite alternate;
+}
+
+.pill-container[data-state="done"] .pill-dot,
+.pill-container[data-state="error"] .pill-dot {
+  /* Icon replaces dot — hidden in these states via JS; kept for fallback */
+  opacity: 0;
+  width: 0;
+  margin-right: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-container[data-state="streaming"] .pill-dot {
+    animation: none;
+    background-color: rgba(200, 241, 53, 0.7);
+  }
+}
+
+@keyframes pill-dot-pulse {
+  from { background-color: rgba(200, 241, 53, 0.7); }
+  to   { background-color: rgba(200, 241, 53, 0.28); }
+}
+
+/* Result icon — replaces dot in done/error states */
+.pill-result-lead-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: pill-icon-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
+
+.pill-result-lead-icon--done {
+  color: var(--color-status-success, #4ade80);
+}
+
+.pill-result-lead-icon--error {
+  color: var(--color-status-error, #f87171);
+}
+
+@keyframes pill-icon-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-result-lead-icon {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Input — blends into the pill surface, no visible rectangle
+ * --------------------------------------------------------------------------- */
 
 .pill-input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
-  /* No default outline — focus is communicated via pill-container border glow */
   outline: none;
-  font-family: var(--font-ui, system-ui, sans-serif);
+  font-family: var(--font-ui, 'Geist', system-ui, sans-serif);
   font-size: 15px;
   font-weight: 400;
-  color: var(--color-fg-primary, #f0f0f0);
-  caret-color: var(--color-accent-default, #c8f135);
   line-height: 1.4;
+  color: var(--color-fg-primary, #f0f0f2);
+  caret-color: #c8f135;
+  /* No focus ring — state is on the pill container */
 }
 
-/* No focus ring on the pill input — the whole pill container already
-   communicates focus. A ring inside the pill is visually redundant and loud. */
 .pill-input:focus-visible {
   outline: none;
 }
 
 .pill-input::placeholder {
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
+  color: var(--color-fg-tertiary, #6e737d);
 }
 
-.pill-input-hint {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.pill-input:disabled {
+  color: var(--color-fg-secondary, #8a8f98);
+  cursor: default;
 }
 
 /* ---------------------------------------------------------------------------
- * Divider between input row and toast/result
+ * Kbd chip — single ↵ chip, mono, right side
+ * Shown: idle (when input has text) and focused states
+ * Hidden: streaming, done, error
+ * --------------------------------------------------------------------------- */
+
+.pill-kbd-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-fg-tertiary, #6e737d);
+  letter-spacing: 0;
+  line-height: 1;
+  transition:
+    opacity 140ms cubic-bezier(0.2, 0, 0, 1),
+    transform 140ms cubic-bezier(0.2, 0, 0, 1);
+  pointer-events: none;
+}
+
+/* Enter to submit — only visible when there's something to submit */
+.pill-kbd-chip[data-chip="enter"] {
+  opacity: 0;
+  transform: translateX(4px);
+}
+
+.pill-kbd-chip[data-chip="enter"][data-visible="true"] {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Copy chip for done state */
+.pill-kbd-chip[data-chip="copy"] {
+  opacity: 0;
+  animation: pill-chip-in 180ms 300ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes pill-chip-in {
+  to { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+ * Streaming progress bar — 2px strip at bottom of input row
+ * --------------------------------------------------------------------------- */
+
+.pill-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: rgba(200, 241, 53, 0.12);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pill-container[data-state="streaming"] .pill-progress-bar {
+  opacity: 1;
+}
+
+.pill-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  border-radius: 1px;
+  background-color: #c8f135;
+  animation: pill-progress-slide 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pill-progress-slide {
+  0%   { left: -40%; opacity: 0.9; }
+  50%  { opacity: 1; }
+  100% { left: 100%; opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-progress-bar::after {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Divider between input row and expanded content
  * --------------------------------------------------------------------------- */
 
 .pill-divider {
   height: 1px;
-  background: var(--color-border-default, rgba(255, 255, 255, 0.08));
-  margin: 0 16px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 0 18px;
 }
 
 /* ---------------------------------------------------------------------------
- * Progress toast area — streaming steps with stagger animation
+ * Progress toast — streaming steps (expanded section)
  * --------------------------------------------------------------------------- */
 
 .pill-toast {
-  padding: 12px 20px 14px;
+  padding: 10px 18px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+  gap: 5px;
+  animation: pill-section-in 150ms cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
 .pill-toast-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--color-fg-secondary, rgba(255, 255, 255, 0.6));
+  color: var(--color-fg-tertiary, #6e737d);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-/* Each step fades in from below — 250ms stagger per step index */
 .pill-toast-step {
   font-size: 13px;
-  color: var(--color-fg-primary, #f0f0f0);
+  color: var(--color-fg-primary, #f0f0f2);
   line-height: 1.5;
-  animation: pill-step-in 250ms cubic-bezier(0, 0, 0.2, 1) forwards;
+  animation: pill-step-in 220ms cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
 .pill-toast-step:nth-child(1) { animation-delay: 0ms; }
-.pill-toast-step:nth-child(2) { animation-delay: 50ms; }
-.pill-toast-step:nth-child(3) { animation-delay: 100ms; }
-.pill-toast-step:nth-child(4) { animation-delay: 150ms; }
+.pill-toast-step:nth-child(2) { animation-delay: 40ms; }
+.pill-toast-step:nth-child(3) { animation-delay: 80ms; }
+.pill-toast-step:nth-child(4) { animation-delay: 120ms; }
 
 .pill-toast-step-number {
   font-size: 11px;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
+  color: var(--color-fg-tertiary, #6e737d);
   font-variant-numeric: tabular-nums;
-}
-
-/* Empty state — shown when pill is idle with no input */
-.pill-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 20px 20px;
-  gap: 6px;
-}
-
-.pill-empty-state__copy {
-  font-size: 12px;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
-  text-align: center;
-  line-height: 1.5;
+  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -215,12 +391,12 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
- * Result display area
+ * Result display area — done / error
  * --------------------------------------------------------------------------- */
 
 .pill-result {
-  padding: 12px 20px 16px;
-  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+  padding: 10px 18px 14px;
+  animation: pill-section-in 200ms cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
 .pill-result-done {
@@ -231,72 +407,49 @@ body {
 
 .pill-result-done-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   margin-top: 2px;
   color: var(--color-status-success, #4ade80);
 }
 
 .pill-result-text {
   font-size: 13px;
-  color: var(--color-fg-primary, #f0f0f0);
+  color: var(--color-fg-primary, #f0f0f2);
   line-height: 1.5;
   flex: 1;
+  min-width: 0;
 }
 
 .pill-result-dismiss {
   font-size: 11px;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
-  margin-top: 6px;
+  color: var(--color-fg-tertiary, #6e737d);
+  margin-top: 4px;
+  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
 }
 
-/* ---------------------------------------------------------------------------
- * Error / target_lost state
- * --------------------------------------------------------------------------- */
-
+/* Error layout */
 .pill-error {
-  padding: 12px 20px 16px;
+  padding: 10px 18px 14px;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  animation: pill-fade-in var(--duration-fast, 120ms) var(--ease-decelerate, ease-out);
+  animation: pill-section-in 200ms cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
 .pill-error-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   margin-top: 2px;
   color: var(--color-status-error, #f87171);
 }
 
 .pill-error-text {
   font-size: 13px;
-  color: var(--color-fg-primary, #f0f0f0);
+  color: var(--color-fg-primary, #f0f0f2);
   line-height: 1.5;
   flex: 1;
-}
-
-/* ---------------------------------------------------------------------------
- * Spinner (re-used from base components but overridden for pill context)
- * --------------------------------------------------------------------------- */
-
-.pill-spinner {
-  width: 14px;
-  height: 14px;
-  color: var(--color-accent-default, #c8f135);
-}
-
-/* ---------------------------------------------------------------------------
- * Queued task indicator
- * --------------------------------------------------------------------------- */
-
-.pill-queued-badge {
-  font-size: 11px;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.4));
-  padding: 2px 8px;
-  background: var(--color-bg-overlay, rgba(255, 255, 255, 0.06));
-  border-radius: var(--radius-full, 9999px);
 }
 
 /* ---------------------------------------------------------------------------
@@ -306,62 +459,90 @@ body {
 .pill-result-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .pill-result-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm, 5px);
-  background: var(--color-bg-overlay, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
-  color: var(--color-fg-secondary, rgba(255, 255, 255, 0.6));
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: var(--color-fg-secondary, #8a8f98);
   font-size: 11px;
   font-weight: 500;
-  font-family: var(--font-ui, system-ui, sans-serif);
+  font-family: var(--font-ui, 'Geist', system-ui, sans-serif);
   cursor: pointer;
-  transition: background var(--duration-normal, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), color var(--duration-normal, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), border-color var(--duration-normal, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+  transition:
+    background 140ms cubic-bezier(0.2, 0, 0, 1),
+    color 140ms cubic-bezier(0.2, 0, 0, 1),
+    border-color 140ms cubic-bezier(0.2, 0, 0, 1);
   letter-spacing: 0.01em;
 }
 
 .pill-result-action-btn:hover {
-  background: var(--color-bg-elevated, rgba(255, 255, 255, 0.1));
-  color: var(--color-fg-primary, #f0f0f0);
-  border-color: var(--color-border-strong, rgba(255, 255, 255, 0.2));
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--color-fg-primary, #f0f0f2);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .pill-result-dismiss-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-xs, 3px);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
   background: transparent;
   border: none;
-  color: var(--color-fg-tertiary, rgba(255, 255, 255, 0.35));
+  color: var(--color-fg-tertiary, #6e737d);
   cursor: pointer;
-  transition: background var(--duration-normal, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), color var(--duration-normal, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+  transition:
+    background 140ms cubic-bezier(0.2, 0, 0, 1),
+    color 140ms cubic-bezier(0.2, 0, 0, 1);
   flex-shrink: 0;
   margin-left: auto;
 }
 
 .pill-result-dismiss-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-fg-primary, #f0f0f0);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-fg-primary, #f0f0f2);
 }
 
 /* ---------------------------------------------------------------------------
- * Animations
+ * Queued task badge
  * --------------------------------------------------------------------------- */
 
-@keyframes pill-fade-in {
+.pill-queued-badge {
+  font-size: 11px;
+  color: var(--color-fg-tertiary, #6e737d);
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
+}
+
+/* ---------------------------------------------------------------------------
+ * Spinner override for pill context
+ * --------------------------------------------------------------------------- */
+
+.pill-spinner {
+  width: 12px;
+  height: 12px;
+  color: rgba(200, 241, 53, 0.8);
+}
+
+/* ---------------------------------------------------------------------------
+ * Shared animations
+ * --------------------------------------------------------------------------- */
+
+@keyframes pill-section-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-3px);
   }
   to {
     opacity: 1;
@@ -369,11 +550,10 @@ body {
   }
 }
 
-/* Step enter animation — fade-in-up per step */
 @keyframes pill-step-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;

@@ -34,9 +34,10 @@ const log = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PILL_WIDTH = 480;  // Dia-like proportions — narrower and tighter than the old 560
-const PILL_HEIGHT_COLLAPSED = 72;
-const PILL_TOP_OFFSET = 80; // px from top of display work area
+const PILL_WIDTH = 480;             // Dia-like proportions — narrower and tighter than the old 560
+const PILL_HEIGHT_COLLAPSED = 56;   // Tighter idle height (was 72 — matches 56px input row)
+const PILL_HEIGHT_EXPANDED = 88;    // Streaming/result state (input row 56 + expanded section ~32)
+const PILL_TOP_OFFSET = 80;         // px from top of display work area
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -304,6 +305,13 @@ export function forwardAgentEvent(event: AgentEvent): void {
 export function getPillWindow(): BrowserWindow | null {
   return pillWindow;
 }
+
+/**
+ * Exported dimension constants — use these in IPC handlers to grow/shrink the pill.
+ * COLLAPSED = idle/focused (56px input row only)
+ * EXPANDED  = streaming or result state (input row + expanded section)
+ */
+export { PILL_WIDTH, PILL_HEIGHT_COLLAPSED, PILL_HEIGHT_EXPANDED };
 
 /**
  * Resize pill window height (grows downward as toast/result appear).
