@@ -23,6 +23,7 @@
 - [iter 6 | 03:01Z] pill-flow e2e GREEN (6/6) + golden-path e2e GREEN (7/7) + test:complete-onboarding IPC added (3 commits)
 - [iter 6b | 03:05Z] Python pytest 252/253 + README + CONTRIBUTING + CHANGELOG (2 commits)
 - [iter 7 | 03:11Z] real-LLM agent-task-wiki spec + fixture + settings build-renderer script + axe-core a11y audit (4 commits)
+- [iter 8 | 03:56Z] agent-task-wiki e2e GREEN — option (a) CDP fix + daemon asyncio fix + _seq echo + renderer paths (1 commit fab3e69)
 
 ---
 
@@ -63,8 +64,8 @@ Do NOT override Vite `root` in vite.settings.config.ts (violates project memory)
 - (b) Write a separate `scripts/build-settings-renderer.ts` that invokes Forge's VitePlugin machinery directly to produce the expected output path.
 - (c) Accept the gap and add docs noting settings screenshots captured manually.
 
-### P4 — Agent-task-wiki e2e (needs LLM)
-`tests/e2e/agent-task-wiki.spec.ts`: real agent task against a local wikipedia fixture page. Requires `ANTHROPIC_API_KEY` (available in `.env`). Should use a tiny deterministic prompt ("scroll to bottom of page and report the last section heading").
+### P4 — DONE (iter 8): Agent-task-wiki e2e GREEN
+`tests/e2e/agent-task-wiki.spec.ts`: real agent task against a local wikipedia fixture page. Passed in 55.9s. Fixes applied: option (a) CDP port, daemon asyncio fix, _seq protocol echo, renderer path corrections, real agent_daemon binary built. Result: `PASS: page at bottom (scrollY=0, scrollHeight=72)`.
 
 ### P5 — Python pytest audit
 `cd my-app/python && pytest` — report counts. Fix anything trivial (imports, deprecation warnings).
@@ -87,7 +88,7 @@ The Figma OAuth URL was generated: user needs to visit it + paste callback. See 
 - **[02:00Z] onboarding-account-scopes capture** — Google OAuth opens external browser; needs mock. See P8.
 - **[02:07Z] pill-flow e2e unskip** — iter 5 completed the refactor (MockDaemonClient, test:open-pill IPC, Menu accelerator trigger) but the spec has not been run against the real harness yet. See P1.
 - **[02:41Z] Figma sync** — OAuth URL issued, user must visit + paste callback. See P8.
-- **[03:11Z] agent-task-wiki CDP stall** — run 2 of the real-LLM e2e stalled on `shell:get-cdp-info` returning null for 21+s (14 retries). Root cause: test launcher doesn't pass `--remote-debugging-port=N` to Electron. Spec remains auto-skip-by-default. Failure history + mitigation options documented inline at `tests/e2e/agent-task-wiki.spec.ts` lines 23-42. Mock e2e coverage (pill-flow 6/6 + golden-path 7/7) already validates the IPC contract.
+- **[03:11Z] agent-task-wiki CDP stall** — RESOLVED in iter 8. Applied option (a): `--remote-debugging-port=9223` + process.argv scan in discoverCdpPort. Also fixed: daemon asyncio event loop (Python 3.9 _shutdown_event in __init__), _seq echo for request/response correlation, renderer paths (.vite/build → .vite/renderer), pyinstaller.spec to build real agent_daemon.py. Spec GREEN: 1 passed (55.9s).
 
 ---
 
