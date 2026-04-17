@@ -1,0 +1,52 @@
+[
+  {
+    "state": "settings-api-key",
+    "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-api-key.png",
+    "captured_at": "2026-04-17T09:01:09.106Z",
+    "width": 0,
+    "height": 0,
+    "success": false,
+    "error": "Settings window did not open",
+    "notes": "Settings window not reachable in test env"
+  },
+  {
+    "state": "settings-agent",
+    "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-agent.png",
+    "captured_at": "2026-04-17T09:01:22.238Z",
+    "width": 0,
+    "height": 0,
+    "success": false,
+    "error": "Settings window did not open",
+    "notes": "Settings window not reachable in test env"
+  },
+  {
+    "state": "settings-appearance",
+    "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-appearance.png",
+    "captured_at": "2026-04-17T09:01:35.397Z",
+    "width": 0,
+    "height": 0,
+    "success": false,
+    "error": "Settings window did not open",
+    "notes": "Settings window not reachable in test env"
+  },
+  {
+    "state": "settings-scopes",
+    "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-scopes.png",
+    "captured_at": "2026-04-17T09:01:48.565Z",
+    "width": 0,
+    "height": 0,
+    "success": false,
+    "error": "Settings window did not open",
+    "notes": "Settings window not reachable in test env"
+  },
+  {
+    "state": "settings-danger-zone",
+    "capture_path": "/Users/reagan/Documents/GitHub/desktop-app/my-app/tests/visual/references/settings-danger-zone.png",
+    "captured_at": "2026-04-17T09:02:01.687Z",
+    "width": 0,
+    "height": 0,
+    "success": false,
+    "error": "Settings window did not open",
+    "notes": "Settings window not reachable in test env"
+  }
+]
