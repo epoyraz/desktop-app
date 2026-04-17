@@ -1,14 +1,20 @@
 /**
  * WindowChrome: root shell component.
- * Composes TabStrip + NavButtons + URLBar into a 72px chrome toolbar.
- * Subscribes to IPC events and keeps local state in sync.
+ * Composes TabStrip + NavButtons + URLBar into the browser chrome. Subscribes
+ * to IPC events and keeps local state in sync, including bookmark state for
+ * the URL-bar star and the Cmd+D save dialog.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { TabStrip } from './TabStrip';
 import { NavButtons } from './NavButtons';
 import { URLBar } from './URLBar';
+import { BookmarkDialog } from './BookmarkDialog';
 import type { TabManagerState, TabState } from '../../main/tabs/TabManager';
+import type {
+  BookmarkNode,
+  PersistedBookmarks,
+} from '../../main/bookmarks/BookmarkStore';
 
 // Typed reference to the contextBridge API
 declare const electronAPI: {
@@ -28,6 +34,11 @@ declare const electronAPI: {
     getActiveTabCdpUrl: () => Promise<string | null>;
     getActiveTabTargetId: () => Promise<string | null>;
   };
+  bookmarks: {
+    list: () => Promise<PersistedBookmarks>;
+    isBookmarked: (url: string) => Promise<boolean>;
+    findByUrl: (url: string) => Promise<BookmarkNode | null>;
+  };
   on: {
     tabsState: (cb: (state: TabManagerState) => void) => () => void;
     tabUpdated: (cb: (tab: TabState) => void) => () => void;
@@ -38,6 +49,8 @@ declare const electronAPI: {
     windowReady: (cb: () => void) => () => void;
     focusUrlBar: (cb: () => void) => () => void;
     targetLost: (cb: (payload: { tabId: string }) => void) => () => void;
+    bookmarksUpdated: (cb: (tree: PersistedBookmarks) => void) => () => void;
+    openBookmarkDialog: (cb: () => void) => () => void;
   };
 };
 
@@ -48,18 +61,29 @@ export function WindowChrome(): React.ReactElement {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [urlBarFocused, setUrlBarFocused] = useState(false);
+  const [bookmarksTree, setBookmarksTree] = useState<PersistedBookmarks | null>(null);
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
 
-  // Derived active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const activeUrl = activeTab?.url ?? '';
+
+  const existingBookmark: BookmarkNode | null = useMemo(() => {
+    if (!bookmarksTree || !activeUrl) return null;
+    return findBookmarkByUrl(bookmarksTree, activeUrl);
+  }, [bookmarksTree, activeUrl]);
 
   // ---------------------------------------------------------------------------
-  // Bootstrap: load initial state
+  // Bootstrap: load initial tab + bookmarks state
   // ---------------------------------------------------------------------------
   useEffect(() => {
     electronAPI.tabs.getState().then((state) => {
       console.log('[WindowChrome] Initial state loaded:', state.tabs.length, 'tabs');
       setTabs(state.tabs);
       setActiveTabId(state.activeTabId);
+    });
+    electronAPI.bookmarks.list().then((tree) => {
+      console.log('[WindowChrome] Bookmarks loaded:', tree.roots[0].children?.length ?? 0, 'bar items');
+      setBookmarksTree(tree);
     });
   }, []);
 
@@ -98,6 +122,14 @@ export function WindowChrome(): React.ReactElement {
       console.log('[WindowChrome] Target lost for tab:', tabId);
     });
 
+    const unsubBookmarksUpdated = electronAPI.on.bookmarksUpdated((tree) => {
+      setBookmarksTree(tree);
+    });
+
+    const unsubOpenDialog = electronAPI.on.openBookmarkDialog(() => {
+      setBookmarkDialogOpen(true);
+    });
+
     return () => {
       unsubTabsState();
       unsubTabUpdated();
@@ -105,6 +137,8 @@ export function WindowChrome(): React.ReactElement {
       unsubFaviconUpdated();
       unsubFocusUrl();
       unsubTargetLost();
+      unsubBookmarksUpdated();
+      unsubOpenDialog();
     };
   }, []);
 
@@ -153,6 +187,11 @@ export function WindowChrome(): React.ReactElement {
     setUrlBarFocused(false);
   }, []);
 
+  const handleStarClick = useCallback(() => {
+    if (!activeUrl) return;
+    setBookmarkDialogOpen(true);
+  }, [activeUrl]);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -185,13 +224,48 @@ export function WindowChrome(): React.ReactElement {
         />
 
         <URLBar
-          url={activeTab?.url ?? ''}
+          url={activeUrl}
           isLoading={activeTab?.isLoading ?? false}
           onNavigate={handleNavigate}
           focused={urlBarFocused}
           onFocusClear={handleUrlFocusClear}
+          isBookmarked={!!existingBookmark}
+          onToggleBookmark={handleStarClick}
         />
       </div>
+
+      {/* Save/Edit dialog */}
+      {bookmarkDialogOpen && activeUrl && (
+        <BookmarkDialog
+          url={activeUrl}
+          title={activeTab?.title ?? ''}
+          existing={existingBookmark}
+          tree={bookmarksTree}
+          onClose={() => setBookmarkDialogOpen(false)}
+        />
+      )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function findBookmarkByUrl(
+  tree: PersistedBookmarks,
+  url: string,
+): BookmarkNode | null {
+  const walk = (node: BookmarkNode): BookmarkNode | null => {
+    if (node.type === 'bookmark' && node.url === url) return node;
+    for (const child of node.children ?? []) {
+      const hit = walk(child);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  for (const root of tree.roots) {
+    const hit = walk(root);
+    if (hit) return hit;
+  }
+  return null;
 }
