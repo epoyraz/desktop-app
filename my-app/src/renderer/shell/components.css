@@ -29,6 +29,12 @@
   -webkit-app-region: drag;
 }
 
+/* Unify tab row + toolbar into one continuous chrome area — matches Chrome.
+   Active tab (#2a2a2e) sits on top of chrome-bg (#1a1a1d) and is visibly lighter. */
+.window-chrome__toolbar {
+  background: var(--color-chrome-bg);
+}
+
 .window-chrome__traffic-light-spacer {
   /* macOS traffic lights in hiddenInset are positioned ~8px from left edge,
      occupy ~54px, with ~18px right padding. 80px clears them cleanly. */

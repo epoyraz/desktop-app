@@ -60,11 +60,11 @@ textarea {
   outline: none;
 }
 
+/* Inputs show focus via their wrapper's border-color change.
+   A bright neon outline on every input is visually aggressive — skip it. */
 input:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--color-accent-default);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
+  outline: none;
 }
 
 input::placeholder,

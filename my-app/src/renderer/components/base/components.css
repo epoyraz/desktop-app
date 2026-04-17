@@ -163,8 +163,10 @@
 }
 
 .agb-input__wrapper:focus-within {
-  border-color: var(--color-accent-default);
-  box-shadow: var(--glow-accent);
+  /* Neutral focus: lift the border to a readable gray — no neon glow.
+     Input is already visually distinct from the page; a loud accent is unnecessary. */
+  border-color: var(--color-fg-secondary);
+  box-shadow: none;
 }
 
 .agb-input__wrapper.agb-input--error {

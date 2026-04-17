@@ -34,7 +34,7 @@ const log = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PILL_WIDTH = 560;
+const PILL_WIDTH = 480;  // Dia-like proportions — narrower and tighter than the old 560
 const PILL_HEIGHT_COLLAPSED = 72;
 const PILL_TOP_OFFSET = 80; // px from top of display work area
 
