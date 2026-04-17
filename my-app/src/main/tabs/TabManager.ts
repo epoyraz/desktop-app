@@ -20,6 +20,7 @@ import { mainLogger } from '../logger';
 
 const NEW_TAB_URL = 'https://www.google.com';
 const CHROME_HEIGHT = 72; // shell toolbar height in pixels
+const BLOCKED_SCHEMES = /^(javascript|file|data|vbscript):/i;
 
 export interface TabState {
   id: string;
@@ -214,7 +215,12 @@ export class TabManager {
 
   createTab(url?: string, id?: string): string {
     const tabId = id ?? uuidv4();
-    const targetUrl = url ?? NEW_TAB_URL;
+    let targetUrl = url ?? NEW_TAB_URL;
+
+    if (url && BLOCKED_SCHEMES.test(url)) {
+      mainLogger.warn('TabManager.createTab.blockedScheme', { url });
+      targetUrl = NEW_TAB_URL;
+    }
 
     mainLogger.info('TabManager.createTab', { tabId, url: targetUrl });
 
