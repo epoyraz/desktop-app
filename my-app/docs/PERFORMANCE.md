@@ -1,8 +1,8 @@
 # Agentic Browser — Performance Audit
 
 **Date:** 2026-04-17  
-**Branch:** `feat/agent-wiring` (51 commits ahead of base `29d3edf`)  
-**Audited by:** Scientist agent (iter 10)  
+**Branch:** `feat/agent-wiring` (54 commits ahead of base `29d3edf`)  
+**Audited by:** Scientist agent (iter 10 + iter 15)  
 **Node:** v24.9.0 | Electron: bundled via electron-forge
 
 ---
@@ -50,36 +50,44 @@ No preload.js emitted as a separate file — preload source (`src/preload.ts`) i
 
 ---
 
-## Startup Time (Instrumented Estimate)
+## Startup Time
 
-Cold and warm startup times were not directly measured via process spawn this run (would require a blocking `electron-forge start`). The following **estimates** are derived from build artefact analysis:
+**Status: spec written, live run deferred.**
 
-| Phase                              | Estimated     | Target  | Status    |
-|------------------------------------|--------------|---------|-----------|
-| Electron process spawn → `whenReady` | ~400–600 ms  | —       | expected  |
-| `whenReady` → shell window load    | ~200–400 ms  | —       | expected  |
-| **Estimated cold launch total**    | ~600–1000 ms | <2000ms | PASS (est)|
-| **Estimated warm launch total**    | ~400–700 ms  | <2000ms | PASS (est)|
+A Playwright-based cold-launch measurement spec was authored at `my-app/tests/perf/startup.spec.ts`. It executes N=5 cold launches (drops run 1 as warmup outlier) and reports mean/min/max/p95 for four milestones:
 
-Basis: main.js is 115 KB (fast parse), renderer bundles are 196–213 KB (fast parse), no synchronous I/O blocking startup identified in `src/main/index.ts`. The onboarding gate and AccountStore file read are the two most likely latency contributors on cold start.
+| Milestone                     | Description                                      |
+|------------------------------|--------------------------------------------------|
+| spawn → first window          | Process spawn to first BrowserWindow visible     |
+| spawn → domcontentloaded      | Process spawn to DOM ready in shell renderer     |
+| spawn → networkidle           | Full cold launch total (target metric)           |
+| window → networkidle          | Renderer-only load time (window creation to idle)|
 
-> LIMITATION: Startup time is estimated, not directly measured. A scripted measurement via `measure-startup.ts` (spawning Electron, watching log lines) was scoped but not executed to avoid blocking on an interactive process during the autonomous session. See optimization opportunities below.
+**Target:** p95 cold startup (spawn → networkidle) < 2000 ms
+
+**To collect real numbers:**
+```
+cd my-app
+npx playwright test tests/perf/startup.spec.ts --reporter=list
+```
+
+The build exists (`.vite/build/main.js`) so the spec is immediately runnable. The spec was not executed during the autonomous session because each 5-launch run requires ~5 min wall-clock time, which exceeded the remaining session budget.
+
+**Drift check:** deferred to a dedicated run outside the autonomous session budget.
+
+[LIMITATION] Startup time figures are not yet measured. The spec is complete and the build is present; running it will populate real numbers. Until then, no estimate is shown — "No data" is more honest than a range that cannot be validated.
 
 ---
 
-## Memory Footprint (Estimated)
+## Memory Footprint
 
-Direct `ps` measurement requires a running Electron instance. The following estimates are based on typical Electron 28+ profiles for apps of this complexity:
+**Status: spec written, live run deferred.**
 
-| Process             | Estimated RSS | Notes                          |
-|--------------------|--------------|-------------------------------|
-| Main process        | ~50–80 MB    | Node.js + IPC + daemon client  |
-| Shell renderer      | ~60–100 MB   | Chromium + React + BrowserView |
-| Pill renderer       | ~30–50 MB    | Lightweight overlay            |
-| GPU process         | ~20–40 MB    | Chromium GPU compositing       |
-| **Estimated total** | ~160–270 MB  | **PASS (<300 MB target)**      |
+The startup spec also collects RSS snapshots at idle (3 s after networkidle) for all Electron child processes (main, renderer, GPU, utility) via `ps -o pid,rss,comm`. Total RSS is asserted against the 300 MB target at the end of each spec run.
 
-> LIMITATION: Memory numbers are estimates based on bundle sizes and Electron process model norms, not live `ps` measurements. A live measurement requires launching the app and waiting for idle state, which was skipped to stay within the 45-minute autonomous budget.
+**Target:** total Electron RSS < 300 MB
+
+[LIMITATION] No live memory measurements were taken. A running Electron instance is required. Run `npx playwright test tests/perf/startup.spec.ts` to collect real RSS numbers.
 
 ---
 
@@ -110,18 +118,18 @@ Direct `ps` measurement requires a running Electron instance. The following esti
 
 ## Pass / Fail vs Targets
 
-| Metric                          | Measured          | Target     | Status       |
-|--------------------------------|------------------|-----------|--------------|
-| Renderer JS — shell            | 196.2 KB          | <400 KB    | PASS         |
-| Renderer JS — pill             | 205.3 KB          | <400 KB    | PASS         |
-| Renderer JS — settings         | 212.8 KB          | <400 KB    | PASS         |
-| Main process JS                | 115.1 KB          | <200 KB    | PASS         |
-| app.asar size                  | 36 KB             | —          | Excellent    |
-| Estimated cold startup         | ~600–1000 ms      | <2000 ms   | PASS (est)   |
-| Estimated total memory         | ~160–270 MB       | <300 MB    | PASS (est)   |
-| Vitest unit tests              | 118 pass / 0 fail | all green  | PASS         |
+| Metric                          | Measured          | Target     | Status              |
+|--------------------------------|------------------|-----------|---------------------|
+| Renderer JS — shell            | 196.2 KB          | <400 KB    | PASS                |
+| Renderer JS — pill             | 205.3 KB          | <400 KB    | PASS                |
+| Renderer JS — settings         | 212.8 KB          | <400 KB    | PASS                |
+| Main process JS                | 115.1 KB          | <200 KB    | PASS                |
+| app.asar size                  | 36 KB             | —          | Excellent           |
+| Cold startup p95 (spawn→idle)  | No data           | <2000 ms   | PENDING — run spec  |
+| Total Electron RSS             | No data           | <300 MB    | PENDING — run spec  |
+| Vitest unit tests              | 118 pass / 0 fail | all green  | PASS                |
 
-**All targets met.** No renderer exceeds 400 KB. Main process is lean at 115 KB.
+**Bundle targets: all PASS.** Startup + memory: spec is ready, run it to get real numbers.
 
 ---
 
@@ -143,11 +151,11 @@ Each of the 3 renderers independently bundles React + ReactDOM (~136 KB each = ~
 
 **Effort:** High. Risk: Medium. Defer.
 
-### 3. Startup time direct measurement script
+### 3. Run the startup spec to get real numbers
 
-No live startup measurement was taken. A `scripts/measure-startup.ts` helper that spawns Electron, tails stdout for `[Main] shell window loaded` log lines, and prints cold/warm durations would give real numbers for the CI dashboard.
+The spec at `my-app/tests/perf/startup.spec.ts` is complete and the build is present. Running it takes ~5 minutes and produces mean/min/max/p95 for four milestones plus RSS snapshots. This should be the first item on the next perf session.
 
-**Effort:** Low (~30 lines). Risk: None (additive script only). High value for ongoing perf tracking.
+**Effort:** Trivial (one command). Risk: None. High value.
 
 ---
 
@@ -155,7 +163,7 @@ No live startup measurement was taken. A `scripts/measure-startup.ts` helper tha
 
 | Win                                       | Effort | Savings         |
 |------------------------------------------|--------|----------------|
-| Write `scripts/measure-startup.ts`       | Low    | Real startup data for CI |
+| Run `npx playwright test tests/perf/startup.spec.ts` | Trivial | Real startup + memory data |
 | Audit settings CSS token scope           | Medium | ~15–20 KB CSS   |
 | Add `build.reportCompressedSize: true` to vite configs | Trivial | Gzip sizes in build output |
 | Add `build.minify: 'terser'` + `terserOptions` for smaller JS | Low | ~5–10% JS reduction |
@@ -164,9 +172,8 @@ No live startup measurement was taken. A `scripts/measure-startup.ts` helper tha
 
 ## Notes on Methodology
 
-- Bundle sizes measured from pre-existing `.vite/` build output (committed artefacts).
-- Startup and memory figures are **estimates** — live measurement requires a running Electron process, which was avoided to prevent blocking the autonomous session.
+- Bundle sizes measured from pre-existing `.vite/` build output (committed artefacts) — these are real numbers.
+- Startup and memory figures: spec written (`my-app/tests/perf/startup.spec.ts`), live run deferred out of session budget. No estimates shown.
 - Vitest: **118 tests pass, 0 fail** (9 test files, 235ms duration).
 - No new npm dependencies were added. No existing code was modified.
 - Build tool: Electron Forge 7.x + Vite 5.x + Rollup.
-
