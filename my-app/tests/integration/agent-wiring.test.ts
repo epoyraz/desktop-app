@@ -281,7 +281,22 @@ describe('daemonLifecycle', () => {
   });
 
   it('restarts daemon on crash with exponential backoff (max 5 tries)', async () => {
+    vi.useFakeTimers();
     const { startDaemon, stopDaemon, _getRestartCount } = await import('../../src/main/daemonLifecycle');
+
+    // Set up fresh mock processes for each spawn call
+    const makeProc = (pid: number) => Object.assign(new EventEmitter(), {
+      pid,
+      kill: vi.fn(),
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    const proc1 = makeProc(11111);
+    const proc2 = makeProc(22222);
+    mockSpawn
+      .mockReturnValueOnce(proc1)
+      .mockReturnValue(proc2);
 
     await startDaemon({
       apiKey: 'sk-test',
@@ -289,15 +304,70 @@ describe('daemonLifecycle', () => {
       skipConnect: true,
     });
 
-    // Simulate a crash
-    mockProcess.emit('exit', 1, null);
+    // Initial spawn: restartCount=0, spawn called once
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(_getRestartCount()).toBe(0);
 
-    // After a crash, a new spawn should be scheduled
-    // (We don't await the backoff timer here, just verify the restart count incremented)
-    // The actual restart timing is tested via the backoff constants
-    expect(_getRestartCount()).toBeGreaterThanOrEqual(0);
+    // Simulate first crash — scheduleRestart increments restartCount to 1,
+    // delay = INITIAL_RESTART_DELAY_MS * BACKOFF_FACTOR^0 = 500ms
+    proc1.emit('exit', 1, null);
+    expect(_getRestartCount()).toBe(1);
+    // Spawn not yet called again (timer is pending)
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+
+    // Advance past the 500ms backoff delay → spawn fires
+    await vi.advanceTimersByTimeAsync(600);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
 
     await stopDaemon();
+    vi.useRealTimers();
+  });
+
+  it('_getRestartCount increments to 1, 2, 3 across 3 consecutive crashes', async () => {
+    vi.useFakeTimers();
+    const { startDaemon, stopDaemon, _getRestartCount } = await import('../../src/main/daemonLifecycle');
+
+    const makeProc = (pid: number) => Object.assign(new EventEmitter(), {
+      pid,
+      kill: vi.fn(),
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    // Pre-load spawn mock with a process for each restart
+    const procs = [10001, 10002, 10003, 10004].map(makeProc);
+    let procIdx = 0;
+    mockSpawn.mockImplementation(() => procs[procIdx++] ?? procs[procs.length - 1]);
+
+    await startDaemon({
+      apiKey: 'sk-test',
+      daemonClient: mockDaemonClientInstance as any,
+      skipConnect: true,
+    });
+
+    expect(mockSpawn).toHaveBeenCalledTimes(1); // initial spawn
+    expect(_getRestartCount()).toBe(0);
+
+    // Crash 1: restartCount → 1, delay 500ms
+    procs[0].emit('exit', 1, null);
+    expect(_getRestartCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+
+    // Crash 2: restartCount → 2, delay 1000ms
+    procs[1].emit('exit', 1, null);
+    expect(_getRestartCount()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(mockSpawn).toHaveBeenCalledTimes(3);
+
+    // Crash 3: restartCount → 3, delay 2000ms
+    procs[2].emit('exit', 1, null);
+    expect(_getRestartCount()).toBe(3);
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(mockSpawn).toHaveBeenCalledTimes(4);
+
+    await stopDaemon();
+    vi.useRealTimers();
   });
 
   it('does not log API key in spawn env', async () => {
