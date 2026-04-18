@@ -172,6 +172,24 @@ const config: ForgeConfig = {
           config: 'vite.preload.config.ts',
           target: 'preload',
         },
+        {
+          // Issue #45: profile picker preload
+          entry: 'src/preload/profilePicker.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
+        {
+          // Issue #71: extensions preload
+          entry: 'src/preload/extensions.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
+        {
+          // Issue #40: history internal page preload
+          entry: 'src/preload/history.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
       ],
       renderer: [
         {
@@ -193,6 +211,21 @@ const config: ForgeConfig = {
           // Track 5: settings renderer (src/renderer/settings/settings.html)
           name: 'settings',
           config: 'vite.settings.config.ts',
+        },
+        {
+          // Issue #45: profile picker renderer
+          name: 'profile_picker',
+          config: 'vite.profilePicker.config.ts',
+        },
+        {
+          // Issue #71: extensions renderer
+          name: 'extensions',
+          config: 'vite.extensions.config.ts',
+        },
+        {
+          // Issue #40: history internal page renderer
+          name: 'history',
+          config: 'vite.history.config.ts',
         },
       ],
     }),

@@ -190,17 +190,17 @@ const api: SettingsAPI = {
 
   getZoomOverrides: async (): Promise<Array<{ origin: string; zoomLevel: number }>> => {
     console.debug('[settings-preload] getZoomOverrides');
-    return ipcRenderer.invoke('settings:get-zoom-overrides') as Promise<Array<{ origin: string; zoomLevel: number }>>;
+    return ipcRenderer.invoke('zoom:list-overrides') as Promise<Array<{ origin: string; zoomLevel: number }>>;
   },
 
   removeZoomOverride: async (origin: string): Promise<boolean> => {
     console.debug('[settings-preload] removeZoomOverride', { origin });
-    return ipcRenderer.invoke('settings:remove-zoom-override', origin) as Promise<boolean>;
+    return ipcRenderer.invoke('zoom:remove-override', origin) as Promise<boolean>;
   },
 
   clearAllZoomOverrides: async (): Promise<void> => {
     console.debug('[settings-preload] clearAllZoomOverrides');
-    await ipcRenderer.invoke('settings:clear-all-zoom-overrides');
+    await ipcRenderer.invoke('zoom:clear-all');
   },
 
   getShowProfilePicker: async (): Promise<boolean> => {

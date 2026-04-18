@@ -557,3 +557,110 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ---------------------------------------------------------------------------
+   Privacy toggle row
+--------------------------------------------------------------------------- */
+
+.settings-privacy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-privacy-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+  margin-bottom: 4px;
+}
+
+.settings-privacy-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-secondary);
+  line-height: var(--line-height-relaxed);
+  max-width: 320px;
+}
+
+/* ---------------------------------------------------------------------------
+   Profiles — toggle row + switch
+--------------------------------------------------------------------------- */
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.settings-toggle-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+}
+
+.settings-toggle-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.settings-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-toggle input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.settings-toggle-track {
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-overlay);
+  border: 1px solid var(--color-border-default);
+  position: relative;
+  transition:
+    background-color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out);
+}
+
+.settings-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-fg-secondary);
+  transition:
+    transform var(--duration-normal) var(--ease-out),
+    background-color var(--duration-normal) var(--ease-out);
+}
+
+.settings-toggle input:checked + .settings-toggle-track {
+  background-color: var(--color-accent-default);
+  border-color: var(--color-accent-default);
+}
+
+.settings-toggle input:checked + .settings-toggle-track::after {
+  transform: translateX(18px);
+  background-color: var(--color-fg-inverse);
+}

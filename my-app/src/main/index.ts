@@ -59,6 +59,9 @@ import { registerPermissionHandlers, unregisterPermissionHandlers } from './perm
 import { ExtensionManager } from './extensions/ExtensionManager';
 import { registerExtensionsHandlers, unregisterExtensionsHandlers } from './extensions/ipc';
 import { openExtensionsWindow } from './extensions/ExtensionsWindow';
+// Issue #40 — History
+import { HistoryStore } from './history/HistoryStore';
+import { registerHistoryHandlers, unregisterHistoryHandlers } from './history/ipc';
 
 // ---------------------------------------------------------------------------
 // Crash telemetry: catch unhandled errors before anything else
@@ -123,6 +126,7 @@ let profileStore: ProfileStore | null = null;
 let permissionStore: PermissionStore | null = null;
 let permissionManager: PermissionManager | null = null;
 let extensionManager: ExtensionManager | null = null;
+let historyStore: HistoryStore | null = null;
 
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({ clientId: process.env.GOOGLE_CLIENT_ID ?? 'PLACEHOLDER_CLIENT_ID' });
@@ -260,6 +264,10 @@ app.whenReady().then(async () => {
       openShellAndWire();
     },
   });
+
+  // Issue #40 — History: init store + register IPC
+  historyStore = new HistoryStore();
+  registerHistoryHandlers({ store: historyStore });
 
   // pill:submit — spawns a Docker container with the agent loop.
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
@@ -411,6 +419,7 @@ app.whenReady().then(async () => {
     tabManager?.flushSession();
     tabManager?.flushZoom();
     bookmarkStore?.flushSync();
+    historyStore?.flushSync();
     permissionStore?.flushSync();
     await teardownHl();
   });
@@ -424,6 +433,7 @@ app.whenReady().then(async () => {
     ipcMain.removeHandler('settings:remove-zoom-override');
     ipcMain.removeHandler('settings:clear-all-zoom-overrides');
     unregisterBookmarkHandlers();
+    unregisterHistoryHandlers();
     unregisterProfileHandlers();
     unregisterPermissionHandlers();
     unregisterExtensionsHandlers();

@@ -29,6 +29,7 @@ const TAB_AGENT        = 'agent'       as const;
 const TAB_APPEARANCE   = 'appearance'  as const;
 const TAB_SCOPES       = 'scopes'      as const;
 const TAB_DANGER       = 'danger'      as const;
+const TAB_PROFILES     = 'profiles'    as const;
 const TAB_PRIVACY      = 'privacy'     as const;
 const TAB_PASSWORDS    = 'passwords'   as const;
 const TAB_ZOOM         = 'site-zoom'   as const;
@@ -38,6 +39,7 @@ type TabId =
   | typeof TAB_AGENT
   | typeof TAB_APPEARANCE
   | typeof TAB_SCOPES
+  | typeof TAB_PROFILES
   | typeof TAB_PRIVACY
   | typeof TAB_ZOOM
   | typeof TAB_DANGER;
@@ -48,6 +50,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: TAB_APPEARANCE, label: 'Appearance' },
   { id: TAB_SCOPES,     label: 'Google Scopes' },
   { id: TAB_PASSWORDS,  label: 'Passwords' },
+  { id: TAB_PROFILES,   label: 'Profiles' },
   { id: TAB_PRIVACY,    label: 'Privacy and security' },
   { id: TAB_ZOOM,       label: 'Site Zoom' },
   { id: TAB_DANGER,     label: 'Danger Zone' },
@@ -100,6 +103,8 @@ declare global {
       getZoomOverrides: () => Promise<Array<{ origin: string; zoomLevel: number }>>;
       removeZoomOverride: (origin: string) => Promise<boolean>;
       clearAllZoomOverrides: () => Promise<void>;
+      getShowProfilePicker: () => Promise<boolean>;
+      setShowProfilePicker: (show: boolean) => Promise<void>;
       closeWindow: () => void;
     };
   }
@@ -535,6 +540,83 @@ function GoogleScopesTab(): React.ReactElement {
             </div>
           </div>
         ))}
+      </Card>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Profiles tab
+// ---------------------------------------------------------------------------
+
+function ProfilesTab(): React.ReactElement {
+  const toast = useToast();
+  const [showPicker, setShowPicker] = useState(false);
+  const [loading, setLoading]       = useState(true);
+
+  useEffect(() => {
+    void window.settingsAPI.getShowProfilePicker().then((val) => {
+      setShowPicker(val);
+      setLoading(false);
+    });
+  }, []);
+
+  async function handleToggle(checked: boolean): Promise<void> {
+    setShowPicker(checked);
+    try {
+      await window.settingsAPI.setShowProfilePicker(checked);
+      toast.show({
+        variant: 'success',
+        title: checked ? 'Profile picker enabled' : 'Profile picker disabled',
+      });
+    } catch (err) {
+      setShowPicker(!checked);
+      toast.show({
+        variant: 'error',
+        title: 'Failed to update setting',
+        message: (err as Error).message,
+      });
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="settings-section">
+        <h2 className="settings-section-title">Profiles</h2>
+        <div className="settings-loading">
+          <Spinner size="md" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Profiles</h2>
+      <p className="settings-section-desc">
+        Manage browser profiles and startup behavior.
+      </p>
+
+      <Card variant="default" padding="md" className="settings-card">
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label">
+              Show profile picker when opening the browser
+            </span>
+            <span className="settings-toggle-desc">
+              Choose which profile to use each time you start browsing.
+            </span>
+          </div>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={showPicker}
+              onChange={(e) => void handleToggle(e.target.checked)}
+            />
+            <span className="settings-toggle-track" />
+          </label>
+        </div>
       </Card>
     </div>
   );
@@ -1080,6 +1162,7 @@ function SettingsInner(): React.ReactElement {
     [TAB_APPEARANCE]: <AppearanceTab />,
     [TAB_SCOPES]:     <GoogleScopesTab />,
     [TAB_PASSWORDS]:  <PasswordsTab />,
+    [TAB_PROFILES]:   <ProfilesTab />,
     [TAB_PRIVACY]:    <PrivacyTab openDialog={clearDataOpen} onDialogChange={setClearDataOpen} />,
     [TAB_ZOOM]:       <SiteZoomTab />,
     [TAB_DANGER]:     <DangerZoneTab />,
