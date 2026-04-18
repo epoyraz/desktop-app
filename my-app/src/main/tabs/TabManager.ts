@@ -130,6 +130,7 @@ export class TabManager {
   // closed-tabs stack mutates. Renderer gets a separate IPC broadcast.
   private onClosedTabsChanged: (() => void) | null = null;
   private onTabClosed: ((tabId: string) => void) | null = null;
+  private onWebContentsCreated: ((wc: import("electron").WebContents) => void) | null = null;
   // Extra pixels the renderer added on top of the base chrome (e.g. 32 px
   // for a visible bookmarks bar). The page-hosting WebContentsView is then
   // positioned at CHROME_HEIGHT + chromeOffset.
@@ -177,6 +178,11 @@ export class TabManager {
 
   setOnTabClosed(cb: ((tabId: string) => void) | null): void {
     this.onTabClosed = cb;
+  }
+
+  /** Called by DeviceManager to attach select-bluetooth-device on new tabs */
+  setOnWebContentsCreated(cb: ((wc: import("electron").WebContents) => void) | null): void {
+    this.onWebContentsCreated = cb;
   }
 
   setHistoryStore(store: HistoryStore): void {
@@ -405,6 +411,7 @@ export class TabManager {
 
     this.attachViewEvents(tabId, view);
     this.positionView(view);
+    this.onWebContentsCreated?.(view.webContents);
 
     view.webContents.loadURL(targetUrl);
 

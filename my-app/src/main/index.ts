@@ -47,6 +47,9 @@ import { registerBookmarkHandlers, unregisterBookmarkHandlers } from './bookmark
 // Password Manager
 import { PasswordStore } from './passwords/PasswordStore';
 import { registerPasswordHandlers, unregisterPasswordHandlers } from './passwords/ipc';
+// Issue #70 — Autofill (addresses + payment cards)
+import { AutofillStore } from './autofill/AutofillStore';
+import { registerAutofillHandlers, unregisterAutofillHandlers } from './autofill/ipc';
 // Issue #45 — Profile picker
 import { ProfileStore } from './profiles/ProfileStore';
 import { registerProfileHandlers, unregisterProfileHandlers } from './profiles/ipc';
@@ -84,6 +87,10 @@ import { registerShareHandlers, unregisterShareHandlers } from './share/ipc';
 // Issue #84 — NTP Customization
 import { NtpCustomizationStore } from './ntp/NtpCustomizationStore';
 import { registerNtpHandlers, unregisterNtpHandlers } from './ntp/ipc';
+// Issue #53 — Device API permissions (WebUSB/WebHID/WebSerial/WebBluetooth)
+import { DeviceStore } from './devices/DeviceStore';
+import { DeviceManager } from './devices/DeviceManager';
+import { registerDeviceHandlers, unregisterDeviceHandlers } from './devices/ipc';
 
 // ---------------------------------------------------------------------------
 // Crash telemetry: catch unhandled errors before anything else
@@ -144,6 +151,7 @@ let tabManager: TabManager | null = null;
 let onboardingWindow: BrowserWindow | null = null;
 let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
+let autofillStore: AutofillStore | null = null;
 let profileStore: ProfileStore | null = null;
 let permissionStore: PermissionStore | null = null;
 let permissionManager: PermissionManager | null = null;
@@ -152,6 +160,8 @@ let contentCategoryStore: ContentCategoryStore | null = null;
 let extensionManager: ExtensionManager | null = null;
 let historyStore: HistoryStore | null = null;
 let downloadManager: DownloadManager | null = null;
+let deviceStore: DeviceStore | null = null;
+let deviceManager: DeviceManager | null = null;
 let activeProfileId = 'default';
 let isGuestSession = false;
 let guestPartitionName: string | null = null;
@@ -206,6 +216,19 @@ function openShellAndWire(profileId?: string): BrowserWindow {
       getShellWindow: () => shellWindow,
       autoRevoker: permissionAutoRevoker ?? undefined,
     });
+  }
+
+  // Issue #53 — Device pickers: wire DeviceManager to session + tab lifecycle
+  if (deviceStore && tabManager) {
+    const tm = tabManager;
+    deviceManager = new DeviceManager({
+      store: deviceStore,
+      getShellWindow: () => shellWindow,
+    });
+    tm.setOnWebContentsCreated((wc) => {
+      deviceManager?.attachToWebContents(wc);
+    });
+    registerDeviceHandlers({ store: deviceStore, manager: deviceManager });
   }
 
   // History menu's "Recently Closed" submenu is dynamic — rebuild the whole
@@ -363,6 +386,7 @@ app.whenReady().then(async () => {
   // only PermissionStore accepts a data dir today.
   bookmarkStore = new BookmarkStore();
   permissionStore = new PermissionStore(getProfileDataDir(activeProfileId));
+  deviceStore = new DeviceStore(getProfileDataDir(activeProfileId));
   contentCategoryStore = new ContentCategoryStore();
   registerContentCategoryHandlers({ store: contentCategoryStore });
   registerBookmarkHandlers({
@@ -376,6 +400,10 @@ app.whenReady().then(async () => {
   // See comment above re: profile-scoped persistence follow-up.
   passwordStore = new PasswordStore();
   registerPasswordHandlers({ store: passwordStore });
+
+  // Issue #70 — Autofill: init store + register IPC.
+  autofillStore = new AutofillStore();
+  registerAutofillHandlers({ store: autofillStore });
 
   // Issue #45 — Profile picker: init store + register IPC
   profileStore = new ProfileStore();
@@ -610,7 +638,9 @@ app.whenReady().then(async () => {
       bookmarkStore?.flushSync();
       historyStore?.flushSync();
       permissionStore?.flushSync();
+      deviceStore?.flushSync();
       contentCategoryStore?.flushSync();
+      autofillStore?.flushSync();
     }
     await teardownHl();
   });
@@ -631,7 +661,9 @@ app.whenReady().then(async () => {
     unregisterProfileHandlers();
     unregisterContentCategoryHandlers();
     unregisterPermissionHandlers();
+    unregisterDeviceHandlers();
     unregisterExtensionsHandlers();
+    unregisterAutofillHandlers();
     // ExtensionManager currently has no dispose()/destroy() hook; its
     // internal MV3 runtime tears itself down via its own lifecycle. If a
     // top-level cleanup is ever added, wire it in here.

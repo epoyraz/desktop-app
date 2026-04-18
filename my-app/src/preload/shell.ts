@@ -15,6 +15,8 @@ import type { PermissionRecord, PermissionType, PermissionState } from '../main/
 import type { PermissionPromptRequest } from '../main/permissions/PermissionManager';
 import type { ProtocolHandlerRecord } from '../main/permissions/ProtocolHandlerStore';
 import type { DownloadItemDTO } from '../main/downloads/DownloadManager';
+import type { DevicePickerRequest } from '../main/devices/DeviceManager';
+import type { GrantedDevice, DeviceApiType } from '../main/devices/DeviceStore';
 
 // ---------------------------------------------------------------------------
 // Type re-exports for renderer consumption
@@ -33,6 +35,9 @@ export type {
   PermissionPromptRequest,
   ProtocolHandlerRecord,
   DownloadItemDTO,
+  DevicePickerRequest,
+  GrantedDevice,
+  DeviceApiType,
 };
 
 // ---------------------------------------------------------------------------
@@ -251,6 +256,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     clearAll: (): Promise<void> =>
       ipcRenderer.invoke('protocol-handlers:clear-all'),
+  },
+
+  // Issue #53 — Device picker (WebUSB, WebHID, Web Serial, Web Bluetooth)
+  devicePicker: {
+    respond: (pickerId: string, deviceId: string | null): Promise<void> =>
+      ipcRenderer.invoke('device-picker:respond', pickerId, deviceId),
+
+    dismiss: (pickerId: string): Promise<void> =>
+      ipcRenderer.invoke('device-picker:dismiss', pickerId),
+  },
+
+  // Issue #53 — Device grants management (for chrome://settings/content/usbDevices etc.)
+  devices: {
+    getAll: (): Promise<GrantedDevice[]> =>
+      ipcRenderer.invoke('devices:get-all'),
+
+    getForApi: (apiType: DeviceApiType): Promise<GrantedDevice[]> =>
+      ipcRenderer.invoke('devices:get-for-api', apiType),
+
+    revoke: (apiType: DeviceApiType, origin: string, deviceId: string): Promise<boolean> =>
+      ipcRenderer.invoke('devices:revoke', apiType, origin, deviceId),
+
+    revokeOrigin: (origin: string): Promise<void> =>
+      ipcRenderer.invoke('devices:revoke-origin', origin),
+
+    revokeAll: (): Promise<void> =>
+      ipcRenderer.invoke('devices:revoke-all'),
   },
 
   // Shell-level signals (renderer → main)
@@ -557,6 +589,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const handler = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
       ipcRenderer.on('ntp-customization-updated', handler);
       return () => ipcRenderer.removeListener('ntp-customization-updated', handler);
+    },
+
+    // Issue #53 — Device picker events
+    devicePickerRequest: (
+      cb: (req: DevicePickerRequest) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, req: DevicePickerRequest) => cb(req);
+      ipcRenderer.on('device-picker-request', handler);
+      return () => ipcRenderer.removeListener('device-picker-request', handler);
+    },
+
+    devicePickerDismiss: (
+      cb: (pickerId: string) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, pickerId: string) => cb(pickerId);
+      ipcRenderer.on('device-picker-dismiss', handler);
+      return () => ipcRenderer.removeListener('device-picker-dismiss', handler);
     },
   },
 

@@ -13,6 +13,7 @@ import { BookmarkDialog } from './BookmarkDialog';
 import { FindBar } from './FindBar';
 import { PasswordPromptBar } from './PasswordPromptBar';
 import { PermissionBar } from './PermissionBar';
+import { DevicePickerBar } from './DevicePickerBar';
 import { ZoomBadge } from './ZoomBadge';
 import { ProfileMenu } from './ProfileMenu';
 import { DownloadButton } from './DownloadButton';
@@ -612,6 +613,7 @@ export function WindowChrome(): React.ReactElement {
       )}
 
       <PermissionBar activeTabId={activeTabId} />
+      <DevicePickerBar />
       <PasswordPromptBar activeTabId={activeTabId} />
       <FindBar activeTabId={activeTabId} />
     </div>
