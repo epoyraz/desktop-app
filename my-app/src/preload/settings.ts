@@ -111,6 +111,15 @@ export interface SettingsAPI {
   deleteAllPasswords: () => Promise<void>;
   listNeverSave: () => Promise<string[]>;
   removeNeverSave: (origin: string) => Promise<void>;
+
+  /** Check if biometric (Touch ID) is available on this device */
+  isBiometricAvailable: () => Promise<boolean>;
+
+  /** Get whether biometric lock is enabled for password operations */
+  getBiometricLock: () => Promise<boolean>;
+
+  /** Set whether biometric lock is enabled for password operations */
+  setBiometricLock: (enabled: boolean) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +260,21 @@ const api: SettingsAPI = {
   removeNeverSave: async (origin: string) => {
     console.debug('[settings-preload] removeNeverSave', { origin });
     return ipcRenderer.invoke('passwords:remove-never-save', origin);
+  },
+
+  isBiometricAvailable: async (): Promise<boolean> => {
+    console.debug('[settings-preload] isBiometricAvailable');
+    return ipcRenderer.invoke('settings:biometric-available') as Promise<boolean>;
+  },
+
+  getBiometricLock: async (): Promise<boolean> => {
+    console.debug('[settings-preload] getBiometricLock');
+    return ipcRenderer.invoke('settings:get-biometric-lock') as Promise<boolean>;
+  },
+
+  setBiometricLock: async (enabled: boolean): Promise<void> => {
+    console.debug('[settings-preload] setBiometricLock', { enabled });
+    await ipcRenderer.invoke('settings:set-biometric-lock', enabled);
   },
 };
 

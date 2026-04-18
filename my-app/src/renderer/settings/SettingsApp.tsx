@@ -106,6 +106,9 @@ declare global {
       getShowProfilePicker: () => Promise<boolean>;
       setShowProfilePicker: (show: boolean) => Promise<void>;
       closeWindow: () => void;
+      isBiometricAvailable: () => Promise<boolean>;
+      getBiometricLock: () => Promise<boolean>;
+      setBiometricLock: (enabled: boolean) => Promise<void>;
     };
   }
 }
@@ -813,14 +816,20 @@ function PasswordsTab(): React.ReactElement {
   const [editId, setEditId] = useState<string | null>(null);
   const [editUsername, setEditUsername] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLock, setBiometricLock] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [pw, ns] = await Promise.all([
+    const [pw, ns, bioAvail, bioLock] = await Promise.all([
       window.settingsAPI.listPasswords(),
       window.settingsAPI.listNeverSave(),
+      window.settingsAPI.isBiometricAvailable(),
+      window.settingsAPI.getBiometricLock(),
     ]);
     setPasswords(pw);
     setNeverSave(ns);
+    setBiometricAvailable(bioAvail);
+    setBiometricLock(bioLock);
     setLoading(false);
   }, []);
 
@@ -832,22 +841,48 @@ function PasswordsTab(): React.ReactElement {
     return p.origin.toLowerCase().includes(q) || p.username.toLowerCase().includes(q);
   });
 
+  async function handleBiometricToggle(checked: boolean): Promise<void> {
+    setBiometricLock(checked);
+    try {
+      await window.settingsAPI.setBiometricLock(checked);
+      toast.show({
+        variant: 'success',
+        title: checked ? 'Touch ID enabled for passwords' : 'Touch ID disabled for passwords',
+      });
+    } catch (err) {
+      setBiometricLock(!checked);
+      toast.show({
+        variant: 'error',
+        title: 'Failed to update setting',
+        message: (err as Error).message,
+      });
+    }
+  }
+
   async function handleReveal(id: string): Promise<void> {
     if (revealedId === id) {
       setRevealedId(null);
       setRevealedPw(null);
       return;
     }
-    const pw = await window.settingsAPI.revealPassword(id);
-    setRevealedId(id);
-    setRevealedPw(pw);
+    try {
+      const pw = await window.settingsAPI.revealPassword(id);
+      setRevealedId(id);
+      setRevealedPw(pw);
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Authentication required', message: (err as Error).message });
+    }
   }
 
   async function handleCopy(id: string): Promise<void> {
-    const pw = await window.settingsAPI.revealPassword(id);
-    if (pw) {
-      await navigator.clipboard.writeText(pw);
-      toast.show({ variant: 'success', title: 'Password copied' });
+    try {
+      const pw = await window.settingsAPI.revealPassword(id);
+      if (pw) {
+        await navigator.clipboard.writeText(pw);
+        toast.show({ variant: 'success', title: 'Password copied' });
+      }
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Authentication required', message: (err as Error).message });
     }
   }
 
@@ -868,12 +903,16 @@ function PasswordsTab(): React.ReactElement {
     const updates: { username?: string; password?: string } = {};
     if (editUsername) updates.username = editUsername;
     if (editPassword) updates.password = editPassword;
-    await window.settingsAPI.updatePassword({ id: editId, ...updates });
-    setEditId(null);
-    setEditUsername('');
-    setEditPassword('');
-    void loadData();
-    toast.show({ variant: 'success', title: 'Password updated' });
+    try {
+      await window.settingsAPI.updatePassword({ id: editId, ...updates });
+      setEditId(null);
+      setEditUsername('');
+      setEditPassword('');
+      void loadData();
+      toast.show({ variant: 'success', title: 'Password updated' });
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Authentication required', message: (err as Error).message });
+    }
   }
 
   async function handleRemoveNeverSave(origin: string): Promise<void> {
@@ -897,6 +936,31 @@ function PasswordsTab(): React.ReactElement {
       <p className="settings-section-desc">
         Manage saved passwords and sites that never save passwords.
       </p>
+
+      {/* Biometric lock toggle */}
+      {biometricAvailable && (
+        <Card variant="default" padding="md" className="settings-card">
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">
+                Use Touch ID to fill passwords
+              </span>
+              <span className="settings-toggle-desc">
+                Require Touch ID or your login password before filling, revealing,
+                copying, or editing saved passwords.
+              </span>
+            </div>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={biometricLock}
+                onChange={(e) => void handleBiometricToggle(e.target.checked)}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+        </Card>
+      )}
 
       {/* Search */}
       <div className="settings-field" style={{ marginBottom: 16 }}>

@@ -13,6 +13,7 @@ import { ipcMain } from 'electron';
 import { mainLogger } from '../logger';
 import { assertString } from '../ipc-validators';
 import type { PasswordStore } from './PasswordStore';
+import { requireBiometric } from './BiometricAuth';
 
 // IPC channels
 const CH_SAVE        = 'passwords:save';
@@ -26,6 +27,7 @@ const CH_REMOVE_NEVER = 'passwords:remove-never-save';
 const CH_LIST_NEVER  = 'passwords:list-never-save';
 const CH_IS_NEVER    = 'passwords:is-never-save';
 const CH_DELETE_ALL  = 'passwords:delete-all';
+const CH_AUTOFILL    = 'passwords:autofill';
 
 let _store: PasswordStore | null = null;
 
@@ -54,14 +56,15 @@ export function registerPasswordHandlers(opts: RegisterPasswordHandlersOptions):
     return _store.listCredentials();
   });
 
-  ipcMain.handle(CH_REVEAL, (_e, id: string) => {
+  ipcMain.handle(CH_REVEAL, async (_e, id: string) => {
     if (!_store) throw new Error('PasswordStore not initialised');
     const validId = assertString(id, 'id', 100);
     mainLogger.info(CH_REVEAL, { id: validId });
+    await requireBiometric('reveal a saved password');
     return _store.revealPassword(validId);
   });
 
-  ipcMain.handle(CH_UPDATE, (_e, payload: { id: string; username?: string; password?: string }) => {
+  ipcMain.handle(CH_UPDATE, async (_e, payload: { id: string; username?: string; password?: string }) => {
     if (!_store) throw new Error('PasswordStore not initialised');
     const id = assertString(payload?.id, 'id', 100);
     const updates: { username?: string; password?: string } = {};
@@ -72,6 +75,7 @@ export function registerPasswordHandlers(opts: RegisterPasswordHandlersOptions):
       updates.password = assertString(payload.password, 'password', 10000);
     }
     mainLogger.info(CH_UPDATE, { id, hasUsername: !!updates.username, hasPassword: !!updates.password });
+    await requireBiometric('edit a saved password');
     return _store.updateCredential(id, updates);
   });
 
@@ -121,7 +125,16 @@ export function registerPasswordHandlers(opts: RegisterPasswordHandlersOptions):
     _store.deleteAllPasswords();
   });
 
-  mainLogger.info('passwords.ipc.register.ok', { channelCount: 11 });
+
+  ipcMain.handle(CH_AUTOFILL, async (_e, id: string) => {
+    if (!_store) throw new Error('PasswordStore not initialised');
+    const validId = assertString(id, 'id', 100);
+    mainLogger.info(CH_AUTOFILL, { id: validId });
+    await requireBiometric('fill a password into a form');
+    return _store.revealPassword(validId);
+  });
+
+  mainLogger.info('passwords.ipc.register.ok', { channelCount: 12 });
 }
 
 export function unregisterPasswordHandlers(): void {
@@ -137,6 +150,7 @@ export function unregisterPasswordHandlers(): void {
   ipcMain.removeHandler(CH_LIST_NEVER);
   ipcMain.removeHandler(CH_IS_NEVER);
   ipcMain.removeHandler(CH_DELETE_ALL);
+  ipcMain.removeHandler(CH_AUTOFILL);
   _store = null;
   mainLogger.info('passwords.ipc.unregister.ok');
 }

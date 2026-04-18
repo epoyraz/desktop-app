@@ -24,6 +24,7 @@ import {
   type DataType,
   type ClearDataResult,
 } from '../privacy/ClearDataController';
+import { isBiometricAvailable } from '../passwords/BiometricAuth';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -45,6 +46,15 @@ const LOGS_DIR_NAME          = 'logs';
 
 const ALLOWED_THEMES = ['onboarding', 'shell'] as const;
 type ThemeName = typeof ALLOWED_THEMES[number];
+
+const DEFAULT_FONT_SIZE = 16;
+const DEFAULT_PAGE_ZOOM = 0;
+const ALLOWED_FONT_SIZES = [9, 12, 16, 20, 24] as const;
+type FontSize = typeof ALLOWED_FONT_SIZES[number];
+
+const ALLOWED_PAGE_ZOOM_PERCENTS = [
+  75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
+] as const;
 
 const GOOGLE_SCOPE_LIST = [
   { scope: 'email',    label: 'Email address' },
@@ -70,6 +80,13 @@ const CH_FACTORY_RESET     = 'settings:factory-reset';
 const CH_CLOSE_WINDOW        = 'settings:close-window';
 const CH_CLEAR_DATA          = 'privacy:clear-data';
 const CH_OPEN_CLEAR_DIALOG   = 'settings:open-clear-data-dialog';
+const CH_GET_FONT_SIZE       = 'settings:get-font-size';
+const CH_SET_FONT_SIZE       = 'settings:set-font-size';
+const CH_GET_DEFAULT_ZOOM    = 'settings:get-default-page-zoom';
+const CH_SET_DEFAULT_ZOOM    = 'settings:set-default-page-zoom';
+const CH_GET_BIOMETRIC_LOCK  = 'settings:get-biometric-lock';
+const CH_SET_BIOMETRIC_LOCK  = 'settings:set-biometric-lock';
+const CH_BIOMETRIC_AVAILABLE = 'settings:biometric-available';
 
 // ---------------------------------------------------------------------------
 // Module-level deps (set by registerSettingsHandlers)
@@ -100,6 +117,46 @@ function maskApiKey(key: string): string {
   const prefix = key.slice(0, 7);    // e.g. "sk-ant-"
   const last4  = key.slice(-4);
   return `${prefix}...${last4}`;
+}
+
+// ---------------------------------------------------------------------------
+// Preferences read-merge-write helpers (exported for TabManager)
+// ---------------------------------------------------------------------------
+
+interface Preferences {
+  theme?: string;
+  fontSize?: number;
+  defaultPageZoom?: number;
+  [key: string]: unknown;
+}
+
+export function readPrefs(): Preferences {
+  try {
+    const raw = fs.readFileSync(getPrefsPath(), 'utf-8');
+    return JSON.parse(raw) as Preferences;
+  } catch {
+    return {};
+  }
+}
+
+function mergePrefs(patch: Partial<Preferences>): void {
+  const prefsPath = getPrefsPath();
+  const existing = readPrefs();
+  const merged = { ...existing, ...patch };
+  fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
+  fs.writeFileSync(prefsPath, JSON.stringify(merged, null, 2), 'utf-8');
+  mainLogger.info('settings.mergePrefs', { keys: Object.keys(patch) });
+}
+
+/** Convert page zoom percent to Electron zoom level: level = log(percent/100) / log(1.2) */
+export function percentToZoomLevel(percent: number): number {
+  if (percent === 100) return 0;
+  return Math.log(percent / 100) / Math.log(1.2);
+}
+
+/** Convert Electron zoom level to percent. */
+export function zoomLevelToPercent(level: number): number {
+  return Math.round(Math.pow(1.2, level) * 100);
 }
 
 // ---------------------------------------------------------------------------
@@ -271,30 +328,57 @@ function handleSetAgentName(_event: Electron.IpcMainInvokeEvent, name: string): 
 
 function handleGetTheme(): string {
   mainLogger.info(CH_GET_THEME);
-  try {
-    const raw = fs.readFileSync(getPrefsPath(), 'utf-8');
-    const prefs = JSON.parse(raw) as { theme?: string };
-    const theme = prefs.theme ?? DEFAULT_THEME;
-    mainLogger.info(`${CH_GET_THEME}.ok`, { theme });
-    return theme;
-  } catch {
-    mainLogger.info(`${CH_GET_THEME}.default`, { theme: DEFAULT_THEME });
-    return DEFAULT_THEME;
-  }
+  const prefs = readPrefs();
+  const theme = prefs.theme ?? DEFAULT_THEME;
+  mainLogger.info(`${CH_GET_THEME}.ok`, { theme });
+  return theme;
 }
 
 function handleSetTheme(_event: Electron.IpcMainInvokeEvent, theme: string): void {
   const validatedTheme: ThemeName = assertOneOf(theme, 'theme', ALLOWED_THEMES);
   mainLogger.info(CH_SET_THEME, { theme: validatedTheme });
-  const prefsPath = getPrefsPath();
   try {
-    fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
-    fs.writeFileSync(prefsPath, JSON.stringify({ theme: validatedTheme }, null, 2), 'utf-8');
+    mergePrefs({ theme: validatedTheme });
     mainLogger.info(`${CH_SET_THEME}.ok`, { theme: validatedTheme });
   } catch (err) {
     mainLogger.error(`${CH_SET_THEME}.failed`, { error: (err as Error).message });
     throw err;
   }
+}
+
+function handleGetFontSize(): number {
+  mainLogger.info(CH_GET_FONT_SIZE);
+  const prefs = readPrefs();
+  const size = typeof prefs.fontSize === 'number' ? prefs.fontSize : DEFAULT_FONT_SIZE;
+  mainLogger.info(`${CH_GET_FONT_SIZE}.ok`, { fontSize: size });
+  return size;
+}
+
+function handleSetFontSize(_event: Electron.IpcMainInvokeEvent, size: number): void {
+  if (typeof size !== 'number' || !(ALLOWED_FONT_SIZES as readonly number[]).includes(size)) {
+    throw new Error(`fontSize must be one of: ${ALLOWED_FONT_SIZES.join(', ')}`);
+  }
+  mainLogger.info(CH_SET_FONT_SIZE, { fontSize: size });
+  mergePrefs({ fontSize: size });
+  mainLogger.info(`${CH_SET_FONT_SIZE}.ok`, { fontSize: size });
+}
+
+function handleGetDefaultPageZoom(): number {
+  mainLogger.info(CH_GET_DEFAULT_ZOOM);
+  const prefs = readPrefs();
+  const zoom = typeof prefs.defaultPageZoom === 'number' ? prefs.defaultPageZoom : DEFAULT_PAGE_ZOOM;
+  mainLogger.info(`${CH_GET_DEFAULT_ZOOM}.ok`, { defaultPageZoom: zoom, percent: zoomLevelToPercent(zoom) });
+  return zoom;
+}
+
+function handleSetDefaultPageZoom(_event: Electron.IpcMainInvokeEvent, percent: number): void {
+  if (typeof percent !== 'number' || !(ALLOWED_PAGE_ZOOM_PERCENTS as readonly number[]).includes(percent)) {
+    throw new Error(`defaultPageZoom percent must be one of: ${ALLOWED_PAGE_ZOOM_PERCENTS.join(', ')}`);
+  }
+  const zoomLevel = percentToZoomLevel(percent);
+  mainLogger.info(CH_SET_DEFAULT_ZOOM, { percent, zoomLevel });
+  mergePrefs({ defaultPageZoom: zoomLevel });
+  mainLogger.info(`${CH_SET_DEFAULT_ZOOM}.ok`, { percent, zoomLevel });
 }
 
 function handleGetOAuthScopes(): Array<{ scope: string; label: string; granted: boolean }> {
@@ -463,6 +547,29 @@ export function openClearDataDialogFromMenu(): void {
   }
 }
 
+function handleGetBiometricLock(): boolean {
+  mainLogger.info(CH_GET_BIOMETRIC_LOCK);
+  const prefs = readPrefs();
+  const enabled = prefs.biometricPasswordLock === true;
+  mainLogger.info(`${CH_GET_BIOMETRIC_LOCK}.ok`, { enabled });
+  return enabled;
+}
+
+function handleSetBiometricLock(_event: Electron.IpcMainInvokeEvent, enabled: boolean): void {
+  if (typeof enabled !== 'boolean') {
+    throw new Error('biometricPasswordLock must be a boolean');
+  }
+  mainLogger.info(CH_SET_BIOMETRIC_LOCK, { enabled });
+  mergePrefs({ biometricPasswordLock: enabled });
+  mainLogger.info(`${CH_SET_BIOMETRIC_LOCK}.ok`, { enabled });
+}
+
+function handleBiometricAvailable(): boolean {
+  const available = isBiometricAvailable();
+  mainLogger.info(CH_BIOMETRIC_AVAILABLE, { available });
+  return available;
+}
+
 function handleCloseWindow(): void {
   mainLogger.info(CH_CLOSE_WINDOW);
   const win = getSettingsWindow();
@@ -493,13 +600,20 @@ export function registerSettingsHandlers(opts: RegisterSettingsHandlersOptions):
   ipcMain.handle(CH_SET_AGENT_NAME,   handleSetAgentName);
   ipcMain.handle(CH_GET_THEME,        handleGetTheme);
   ipcMain.handle(CH_SET_THEME,        handleSetTheme);
+  ipcMain.handle(CH_GET_FONT_SIZE,    handleGetFontSize);
+  ipcMain.handle(CH_SET_FONT_SIZE,    handleSetFontSize);
+  ipcMain.handle(CH_GET_DEFAULT_ZOOM, handleGetDefaultPageZoom);
+  ipcMain.handle(CH_SET_DEFAULT_ZOOM, handleSetDefaultPageZoom);
   ipcMain.handle(CH_GET_OAUTH_SCOPES, handleGetOAuthScopes);
   ipcMain.handle(CH_RE_CONSENT_SCOPE, handleReConsentScope);
   ipcMain.handle(CH_FACTORY_RESET,    handleFactoryReset);
   ipcMain.handle(CH_CLEAR_DATA,       handleClearData);
   ipcMain.on(CH_CLOSE_WINDOW,         handleCloseWindow);
+  ipcMain.handle(CH_GET_BIOMETRIC_LOCK,  handleGetBiometricLock);
+  ipcMain.handle(CH_SET_BIOMETRIC_LOCK,  handleSetBiometricLock);
+  ipcMain.handle(CH_BIOMETRIC_AVAILABLE, handleBiometricAvailable);
 
-  mainLogger.info('settings.ipc.register.ok', { channelCount: 12 });
+  mainLogger.info('settings.ipc.register.ok', { channelCount: 19 });
 }
 
 export function unregisterSettingsHandlers(): void {
@@ -512,11 +626,18 @@ export function unregisterSettingsHandlers(): void {
   ipcMain.removeHandler(CH_SET_AGENT_NAME);
   ipcMain.removeHandler(CH_GET_THEME);
   ipcMain.removeHandler(CH_SET_THEME);
+  ipcMain.removeHandler(CH_GET_FONT_SIZE);
+  ipcMain.removeHandler(CH_SET_FONT_SIZE);
+  ipcMain.removeHandler(CH_GET_DEFAULT_ZOOM);
+  ipcMain.removeHandler(CH_SET_DEFAULT_ZOOM);
   ipcMain.removeHandler(CH_GET_OAUTH_SCOPES);
   ipcMain.removeHandler(CH_RE_CONSENT_SCOPE);
   ipcMain.removeHandler(CH_FACTORY_RESET);
   ipcMain.removeHandler(CH_CLEAR_DATA);
   ipcMain.removeAllListeners(CH_CLOSE_WINDOW);
+  ipcMain.removeHandler(CH_GET_BIOMETRIC_LOCK);
+  ipcMain.removeHandler(CH_SET_BIOMETRIC_LOCK);
+  ipcMain.removeHandler(CH_BIOMETRIC_AVAILABLE);
 
   _accountStore  = null;
   _keychainStore = null;

@@ -85,6 +85,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showContextMenu: (tabId: string): Promise<void> =>
       ipcRenderer.invoke('tabs:show-context-menu', tabId),
 
+    pin: (tabId: string): Promise<void> =>
+      ipcRenderer.invoke('tabs:pin', tabId),
+
+    unpin: (tabId: string): Promise<void> =>
+      ipcRenderer.invoke('tabs:unpin', tabId),
+
     showBackHistory: (tabId: string): Promise<void> =>
       ipcRenderer.invoke('tabs:show-back-history', tabId),
 
@@ -451,5 +457,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     findForOrigin: (origin: string): Promise<Array<{ id: string; origin: string; username: string }>> =>
       ipcRenderer.invoke('passwords:find-for-origin', origin),
+
+    autofill: (id: string): Promise<string | null> =>
+      ipcRenderer.invoke('passwords:autofill', id),
   },
 });
