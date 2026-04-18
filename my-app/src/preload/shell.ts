@@ -408,6 +408,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ntp:pick-background-image'),
   },
 
+  // Issue #104 — Live Caption: get current persisted state for initial hydration
+  liveCaption: {
+    getState: (): Promise<{ enabled: boolean; language: string }> =>
+      ipcRenderer.invoke('settings:get-live-caption') as Promise<{ enabled: boolean; language: string }>,
+  },
+
   // Event listeners
   on: {
     tabsState: (
@@ -696,6 +702,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const handler = (_e: Electron.IpcRendererEvent, payload: { isFullscreen: boolean }) => cb(payload);
       ipcRenderer.on('fullscreen-changed', handler);
       return () => ipcRenderer.removeListener('fullscreen-changed', handler);
+    },
+
+    // Issue #104 — Live Caption: receive state changes from main process
+    liveCaptionStateChanged: (cb: (state: { enabled: boolean; language: string }) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, state: { enabled: boolean; language: string }) => cb(state);
+      ipcRenderer.on('live-caption:state-changed', handler);
+      return () => ipcRenderer.removeListener('live-caption:state-changed', handler);
     },
   },
 
