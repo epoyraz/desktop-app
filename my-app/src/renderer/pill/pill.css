@@ -63,7 +63,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: transparent;
+  background: #0a0a0d;
   overflow: hidden;
   font-family: var(--font-ui, 'Geist', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
@@ -89,9 +89,9 @@ body {
   /* why-not-a-token: semi-transparent glass background is a composited effect
      (rgba + backdrop-filter) intrinsic to the floating pill aesthetic.
      A flat --color-bg-* token would lose the translucency. */
-  background: rgba(20, 20, 22, 0.92);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: #14141a;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   /* why-not-a-token: alpha-white border is the idle state of a 4-state
      glow system (idle/focused/streaming/done). Each state has a distinct
      alpha value tied to the glass aesthetic — these are state constants,

@@ -105,11 +105,13 @@ export function createPillWindow(): BrowserWindow {
   pillWindow = new BrowserWindow({
     width: PILL_WIDTH,
     height: PILL_HEIGHT_COLLAPSED,
-    transparent: true,
+    transparent: false,
     frame: false,
     alwaysOnTop: true,
     hasShadow: true,
     resizable: false,
+    backgroundColor: '#0a0a0d',
+    roundedCorners: true,
     skipTaskbar: true,
     show: false,
     // Ensure it appears above full-screen apps on macOS
