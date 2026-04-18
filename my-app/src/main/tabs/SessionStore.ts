@@ -14,6 +14,7 @@ export interface PersistedTab {
   id: string;
   url: string;
   title: string;
+  pinned?: boolean;
 }
 
 export interface PersistedSession {
@@ -28,17 +29,19 @@ const EMPTY_SESSION: PersistedSession = {
   activeTabId: null,
 };
 
-function getSessionPath(): string {
-  return path.join(app.getPath('userData'), SESSION_FILE_NAME);
-}
-
 export class SessionStore {
+  private readonly filePath: string;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSession: PersistedSession | null = null;
 
+  constructor(dataDir?: string) {
+    this.filePath = path.join(dataDir ?? app.getPath('userData'), SESSION_FILE_NAME);
+    console.log('[SessionStore] dataDir:', this.filePath);
+  }
+
   load(): PersistedSession {
     try {
-      const raw = fs.readFileSync(getSessionPath(), 'utf-8');
+      const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as PersistedSession;
       if (parsed.version !== 1 || !Array.isArray(parsed.tabs)) {
         console.warn('[SessionStore] Invalid session format, resetting');
@@ -64,8 +67,9 @@ export class SessionStore {
   flushSync(): void {
     if (!this.pendingSession) return;
     try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       fs.writeFileSync(
-        getSessionPath(),
+        this.filePath,
         JSON.stringify(this.pendingSession, null, 2),
         'utf-8',
       );

@@ -52,6 +52,8 @@ export interface TabState {
   canGoBack: boolean;
   canGoForward: boolean;
   zoomLevel: number;
+  pinned: boolean;
+  audible: boolean;
 }
 
 export interface TabManagerState {
@@ -108,6 +110,7 @@ export class TabManager {
   // Per-tab last find query — lets Cmd+F re-open with the previous query
   // pre-filled (Chrome parity). Session-only; cleared on tab close.
   private lastFindQuery: Map<string, string> = new Map();
+  private pinnedTabs: Set<string> = new Set();
   // Pill toggle callback, injected from main/index.ts. Invoked from the
   // before-input-event handler when the user hits Cmd+K inside a tab's
   // webContents — Chromium's renderer otherwise intercepts the keystroke
@@ -117,12 +120,20 @@ export class TabManager {
   private zoomStore: ZoomStore;
   private urlMatchFn: UrlMatchFn | null = null;
   private historyStore: HistoryStore | null = null;
+  readonly isGuest: boolean;
+  private readonly guestPartition: string | null;
 
-  constructor(win: BrowserWindow) {
+  constructor(win: BrowserWindow, opts?: { guest?: boolean; guestPartition?: string }) {
     this.win = win;
+    this.isGuest = opts?.guest ?? false;
+    this.guestPartition = opts?.guestPartition ?? null;
     this.sessionStore = new SessionStore();
     this.zoomStore = new ZoomStore();
     this.registerIpcHandlers();
+    mainLogger.info('TabManager.init', {
+      isGuest: this.isGuest,
+      guestPartition: this.guestPartition,
+    });
   }
 
   setOnClosedTabsChanged(cb: (() => void) | null): void {
@@ -211,6 +222,11 @@ export class TabManager {
   // ---------------------------------------------------------------------------
 
   restoreSession(): void {
+    if (this.isGuest) {
+      mainLogger.info('TabManager.restoreSession.guest', { msg: 'Guest mode — skipping session restore' });
+      this.createTab();
+      return;
+    }
     const session = this.sessionStore.load();
     if (session.tabs.length === 0) {
       mainLogger.info('TabManager.restoreSession.empty', { msg: 'No saved tabs, opening new tab' });
@@ -222,6 +238,10 @@ export class TabManager {
     mainLogger.info('TabManager.restoreSession', { tabCount: session.tabs.length });
     for (const persisted of session.tabs) {
       this.createTab(persisted.url, persisted.id);
+      if (persisted.pinned) {
+        this.pinnedTabs.add(persisted.id);
+        mainLogger.info('TabManager.restoreSession.pinnedTab', { tabId: persisted.id });
+      }
     }
 
     if (session.activeTabId && this.tabs.has(session.activeTabId)) {
@@ -238,16 +258,19 @@ export class TabManager {
         id,
         url: view.webContents.getURL() || NEW_TAB_URL,
         title: view.webContents.getTitle() || 'New Tab',
+        pinned: this.pinnedTabs.has(id),
       };
     });
     return { version: 1, tabs, activeTabId: this.activeTabId };
   }
 
   saveSession(): void {
+    if (this.isGuest) return;
     this.sessionStore.save(this.buildPersistedSession());
   }
 
   flushSession(): void {
+    if (this.isGuest) return;
     this.sessionStore.flushSync();
   }
 
@@ -270,13 +293,15 @@ export class TabManager {
 
     mainLogger.info('TabManager.createTab', { tabId, url: targetUrl });
 
-    const view = new WebContentsView({
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
+    const webPrefs: Electron.WebPreferences = {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    };
+    if (this.guestPartition) {
+      webPrefs.partition = this.guestPartition;
+    }
+    const view = new WebContentsView({ webPreferences: webPrefs });
 
     this.win.contentView.addChildView(view);
     this.tabs.set(tabId, view);
@@ -312,14 +337,19 @@ export class TabManager {
     return tabId;
   }
 
-  closeTab(tabId: string): void {
+  closeTab(tabId: string, force = false): void {
     const view = this.tabs.get(tabId);
     if (!view) {
       mainLogger.warn('TabManager.closeTab.unknown', { tabId });
       return;
     }
 
-    mainLogger.info('TabManager.closeTab', { tabId });
+    if (this.pinnedTabs.has(tabId) && !force) {
+      mainLogger.info('TabManager.closeTab.blocked', { tabId, reason: 'pinned' });
+      return;
+    }
+
+    mainLogger.info('TabManager.closeTab', { tabId, pinned: this.pinnedTabs.has(tabId) });
 
     // Notify permission manager to expire session grants for this tab
     try { this.onTabClosed?.(tabId); } catch {}
@@ -340,6 +370,7 @@ export class TabManager {
     this.tabs.delete(tabId);
     this.navControllers.delete(tabId);
     this.lastFindQuery.delete(tabId);
+    this.pinnedTabs.delete(tabId);
     this.tabOrder = this.tabOrder.filter((id) => id !== tabId);
 
     if (this.activeTabId === tabId) {
@@ -441,9 +472,18 @@ export class TabManager {
   moveTab(tabId: string, toIndex: number): void {
     const fromIndex = this.tabOrder.indexOf(tabId);
     if (fromIndex === -1) return;
+    const isPinned = this.pinnedTabs.has(tabId);
+    const pinnedCount = this.getPinnedCount();
     this.tabOrder.splice(fromIndex, 1);
-    this.tabOrder.splice(Math.max(0, Math.min(toIndex, this.tabOrder.length)), 0, tabId);
-    mainLogger.info('TabManager.moveTab.ok', { tabId, toIndex });
+    // Enforce pinned boundary: pinned tabs stay in [0, pinnedCount), unpinned in [pinnedCount, end)
+    let clampedIndex: number;
+    if (isPinned) {
+      clampedIndex = Math.max(0, Math.min(toIndex, pinnedCount - 1));
+    } else {
+      clampedIndex = Math.max(pinnedCount, Math.min(toIndex, this.tabOrder.length));
+    }
+    this.tabOrder.splice(clampedIndex, 0, tabId);
+    mainLogger.info('TabManager.moveTab.ok', { tabId, toIndex: clampedIndex, isPinned });
     this.saveSession();
     this.broadcastState();
   }
@@ -887,6 +927,7 @@ export class TabManager {
   }
 
   flushZoom(): void {
+    if (this.isGuest) return;
     this.zoomStore.flushSync();
   }
 
@@ -1026,6 +1067,8 @@ export class TabManager {
         canGoBack: nav.canGoBack(),
         canGoForward: nav.canGoForward(),
         zoomLevel: view.webContents.getZoomLevel(),
+        pinned: this.pinnedTabs.has(id),
+        audible: view.webContents.isCurrentlyAudible(),
       };
     });
     return { tabs, activeTabId: this.activeTabId, cdpPort: this.cdpPort };
@@ -1247,6 +1290,8 @@ export class TabManager {
       canGoBack: nav?.canGoBack() ?? false,
       canGoForward: nav?.canGoForward() ?? false,
       zoomLevel: view.webContents.getZoomLevel(),
+      pinned: this.pinnedTabs.has(tabId),
+      audible: view.webContents.isCurrentlyAudible(),
     };
     this.safeSend('tab-updated', state);
   }
@@ -1276,6 +1321,46 @@ export class TabManager {
     this.win.webContents.send(channel, payload);
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Pinned tabs (Issue #3)
+  // ---------------------------------------------------------------------------
+
+  private getPinnedCount(): number {
+    return this.pinnedTabs.size;
+  }
+
+  isTabPinned(tabId: string): boolean {
+    return this.pinnedTabs.has(tabId);
+  }
+
+  pinTab(tabId: string): void {
+    if (!this.tabs.has(tabId) || this.pinnedTabs.has(tabId)) return;
+    this.pinnedTabs.add(tabId);
+    // Move to end of pinned region
+    const fromIndex = this.tabOrder.indexOf(tabId);
+    if (fromIndex === -1) return;
+    this.tabOrder.splice(fromIndex, 1);
+    const pinnedCount = this.getPinnedCount();
+    this.tabOrder.splice(pinnedCount - 1, 0, tabId);
+    mainLogger.info('TabManager.pinTab', { tabId, pinnedCount });
+    this.saveSession();
+    this.broadcastState();
+  }
+
+  unpinTab(tabId: string): void {
+    if (!this.pinnedTabs.has(tabId)) return;
+    this.pinnedTabs.delete(tabId);
+    // Move to start of unpinned region (right after last pinned tab)
+    const fromIndex = this.tabOrder.indexOf(tabId);
+    if (fromIndex === -1) return;
+    this.tabOrder.splice(fromIndex, 1);
+    const pinnedCount = this.getPinnedCount();
+    this.tabOrder.splice(pinnedCount, 0, tabId);
+    mainLogger.info('TabManager.unpinTab', { tabId, pinnedCount });
+    this.saveSession();
+    this.broadcastState();
+  }
 
   // ---------------------------------------------------------------------------
   // Tab context menu actions (Issue #2)
@@ -1335,6 +1420,20 @@ export class TabManager {
     menu.append(new MenuItem({
       label: 'Duplicate',
       click: () => this.duplicateTab(tabId),
+    }));
+
+    menu.append(new MenuItem({ type: 'separator' }));
+
+    const isPinned = this.pinnedTabs.has(tabId);
+    menu.append(new MenuItem({
+      label: isPinned ? 'Unpin Tab' : 'Pin Tab',
+      click: () => {
+        if (isPinned) {
+          this.unpinTab(tabId);
+        } else {
+          this.pinTab(tabId);
+        }
+      },
     }));
 
     menu.append(new MenuItem({ type: 'separator' }));
@@ -1466,6 +1565,13 @@ export class TabManager {
       this.showTabContextMenu(tabId);
     });
 
+    ipcMain.handle('tabs:pin', (_e, tabId: string) => {
+      this.pinTab(tabId);
+    });
+
+    ipcMain.handle('tabs:unpin', (_e, tabId: string) => {
+      this.unpinTab(tabId);
+    });
 
     // Issue #19 — back/forward long-press history menu
     ipcMain.handle('tabs:show-back-history', (_e, tabId: string) => {
@@ -1547,6 +1653,8 @@ export class TabManager {
     ipcMain.removeHandler('tabs:reopen-closed-at');
     ipcMain.removeHandler('tabs:get-closed-tabs');
     ipcMain.removeHandler('tabs:show-context-menu');
+    ipcMain.removeHandler('tabs:pin');
+    ipcMain.removeHandler('tabs:unpin');
     ipcMain.removeHandler('tabs:show-back-history');
     ipcMain.removeHandler('tabs:show-forward-history');
     ipcMain.removeHandler('zoom:get-percent');

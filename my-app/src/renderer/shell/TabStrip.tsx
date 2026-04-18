@@ -54,12 +54,14 @@ function TabItem({
   isDragOver,
   onContextMenu,
 }: TabItemProps): React.ReactElement {
+  const isPinned = tab.pinned;
   return (
     <div
       className={[
         'tab-item',
         isActive ? 'tab-item--active' : '',
         isDragOver ? 'tab-item--drag-over' : '',
+        isPinned ? 'tab-item--pinned' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -75,11 +77,18 @@ function TabItem({
       onDragOver={(e) => onDragOver(e, index)}
       onDrop={(e) => onDrop(e, index)}
       onContextMenu={onContextMenu}
+      title={isPinned ? tab.title : undefined}
     >
-      {/* Favicon / loading spinner */}
+      {/* Favicon / loading spinner / audio indicator */}
       <span className="tab-item__favicon" aria-hidden="true">
         {tab.isLoading ? (
           <span className="tab-item__spinner" />
+        ) : isPinned && tab.audible ? (
+          <svg className="tab-item__audio-icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2L4.5 5H2v6h2.5L8 14V2z" fill="currentColor" />
+            <path d="M11 5.5c.8.8 1.2 1.8 1.2 2.5s-.4 1.7-1.2 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <path d="M12.5 3.5C14 5 14.8 6.8 14.8 8s-.8 3-2.3 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
         ) : tab.favicon ? (
           <img src={tab.favicon} alt="" width={14} height={14} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         ) : (
@@ -87,27 +96,31 @@ function TabItem({
         )}
       </span>
 
-      {/* Title */}
-      <span className="tab-item__title" title={tab.title}>
-        {tab.title || 'New Tab'}
-      </span>
+      {/* Title — hidden for pinned tabs */}
+      {!isPinned && (
+        <span className="tab-item__title" title={tab.title}>
+          {tab.title || 'New Tab'}
+        </span>
+      )}
 
-      {/* Close button */}
-      <button
-        type="button"
-        className="tab-item__close"
-        aria-label={`Close ${tab.title || 'tab'}`}
-        onClick={onClose}
-      >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path
-            d="M3 3l6 6M9 3l-6 6"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
+      {/* Close button — hidden for pinned tabs */}
+      {!isPinned && (
+        <button
+          type="button"
+          className="tab-item__close"
+          aria-label={`Close ${tab.title || 'tab'}`}
+          onClick={onClose}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path
+              d="M3 3l6 6M9 3l-6 6"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

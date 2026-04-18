@@ -123,11 +123,11 @@
   content: '';
   position: absolute;
   left: -1px;
-  top: 8px;
-  bottom: 8px;
+  top: 6px;
+  bottom: 6px;
   width: 1px;
   background: var(--color-border-default);
-  opacity: 0.6;
+  opacity: 0.4;
 }
 
 .tab-item:hover::before,
@@ -138,7 +138,7 @@
 }
 
 .tab-item:hover {
-  background: var(--color-tab-hover);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--color-fg-primary);
 }
 
@@ -151,11 +151,34 @@
 .tab-item--active:hover {
   background: var(--color-tab-active);
   color: var(--color-fg-primary);
+  margin-bottom: -1px;
+  padding-bottom: 1px;
+  z-index: 1;
 }
 
 .tab-item--drag-over {
   outline: 2px solid var(--color-accent-default);
   outline-offset: -2px;
+}
+
+
+/* Pinned tab — favicon-only width, no title or close button */
+.tab-item--pinned {
+  min-width: 36px;
+  max-width: 36px;
+  flex: 0 0 36px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.tab-item--pinned .tab-item__title,
+.tab-item--pinned .tab-item__close {
+  display: none;
+}
+
+.tab-item__audio-icon {
+  color: var(--color-accent-default);
 }
 
 .tab-item__favicon {
@@ -306,7 +329,7 @@
   align-items: center;
   flex: 1;
   position: relative;
-  height: 30px;
+  height: 36px;
   padding: 0 12px;
   gap: 8px;
   background: var(--color-bg-overlay);
@@ -625,8 +648,8 @@
 .bookmark-dialog__scrim {
   position: fixed;
   inset: 0;
-  background: var(--color-modal-scrim);
-  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1050,9 +1073,10 @@
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  z-index: var(--z-dropdown);
+  z-index: 100;
   padding: 4px;
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 90px);
 }
 
 .profile-menu__current {
