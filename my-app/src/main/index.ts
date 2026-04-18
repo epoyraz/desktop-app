@@ -168,6 +168,11 @@ const incognitoWindows = new Set<BrowserWindow>();
 // one session (matches Chrome behaviour). Cleared when the last window closes.
 let incognitoPartitionName: string | null = null;
 
+// Tracks all secondary guest windows opened via tab-detach so we can clear
+// the shared session only when the LAST one closes (the primary guest shell is
+// not included here — it manages its own cleanup in openGuestShell()).
+const secondaryGuestWindows = new Set<BrowserWindow>();
+
 let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
 let autofillStore: AutofillStore | null = null;
@@ -265,6 +270,10 @@ function openShellAndWire(profileId?: string): BrowserWindow {
     rebuildApplicationMenu();
   });
 
+  tabManager.setOnMoveTabToNewWindow((url: string) => {
+    openNewWindow(url);
+  });
+
   setTimeout(async () => {
     if (tabManager) {
       const port = await tabManager.discoverCdpPort();
@@ -318,6 +327,10 @@ function openShellAndWire(profileId?: string): BrowserWindow {
     tabManager?.setFullscreen(false);
     shellWindow?.webContents.send('fullscreen-changed', { isFullscreen: false });
   });
+
+  // Capture before module-level tabManager can be reassigned by a profile switch.
+  const shellTm = tabManager;
+  shellWindow.on('closed', () => shellTm.destroy());
 
   // DEV/TEST: expose tabManager on the Node.js global object so E2E tests can
   // reach it via electronApp.evaluate() calls (which run in the same Node.js
@@ -403,16 +416,23 @@ function openGuestShell(): BrowserWindow {
 
   shellWindow.on('resize', () => tabManager?.relayout());
 
+  const guestTm = tabManager;
+  const primaryPartition = guestPartitionName;
   shellWindow.on('closed', () => {
     mainLogger.info('main.guestShell.closed', {
-      msg: 'Guest window closed — clearing ephemeral session data',
-      guestPartitionName,
+      msg: 'Guest shell closed',
+      guestPartitionName: primaryPartition,
+      secondaryGuestWindows: secondaryGuestWindows.size,
     });
-    if (guestPartitionName) {
-      void clearGuestSession(guestPartitionName);
-    }
+    guestTm.destroy();
     isGuestSession = false;
     guestPartitionName = null;
+    // Only clear the ephemeral session data when ALL windows sharing this
+    // partition have closed (secondary detached windows may still be open).
+    if (primaryPartition && secondaryGuestWindows.size === 0) {
+      mainLogger.info('main.guestShell.clearSession', { partition: primaryPartition });
+      void clearGuestSession(primaryPartition);
+    }
   });
 
   return shellWindow;
@@ -421,7 +441,7 @@ function openGuestShell(): BrowserWindow {
 // ---------------------------------------------------------------------------
 // New window (Cmd+N) — fresh window sharing the active profile session
 // ---------------------------------------------------------------------------
-function openNewWindow(): BrowserWindow {
+function openNewWindow(initialUrl?: string): BrowserWindow {
   const pid = activeProfileId;
   const profileDataDir = getProfileDataDir(pid);
   const profilePartition = getProfilePartitionName(pid);
@@ -435,8 +455,15 @@ function openNewWindow(): BrowserWindow {
     const store = bookmarkStore;
     tm.setUrlMatchFn((candidate: string) => store.isUrlBookmarked(candidate) ? candidate : null);
   }
-  tm.restoreSession();
+  if (initialUrl) {
+    tm.createTab(initialUrl);
+  } else {
+    tm.restoreSession();
+  }
   tm.setOnClosedTabsChanged(() => rebuildApplicationMenu());
+  tm.setOnMoveTabToNewWindow((url: string) => {
+    openNewWindow(url);
+  });
 
   win.webContents.once('did-finish-load', () => {
     mainLogger.info('main.newWindow.ready', { windowId: win.id });
@@ -457,19 +484,26 @@ function openNewWindow(): BrowserWindow {
 // ---------------------------------------------------------------------------
 // Incognito window (Cmd+Shift+N) — isolated session, cleared on last close
 // ---------------------------------------------------------------------------
-function openIncognitoWindow(): BrowserWindow {
+function openIncognitoWindow(initialUrl?: string): BrowserWindow {
   // All incognito windows in a profile share one session partition.
   if (!incognitoPartitionName) {
     incognitoPartitionName = `${INCOGNITO_PARTITION_PREFIX}-${activeProfileId}-${Date.now()}`;
     mainLogger.info('main.openIncognitoWindow.newPartition', { incognitoPartitionName });
   }
   const partition = incognitoPartitionName;
-  mainLogger.info('main.openIncognitoWindow', { partition });
+  mainLogger.info('main.openIncognitoWindow', { partition, initialUrl });
 
   const win = createShellWindow({ titleSuffix: ' (Incognito)', incognito: true });
   const tm = new TabManager(win, { guest: true, partition });
-  tm.restoreSession();
+  if (initialUrl) {
+    tm.createTab(initialUrl);
+  } else {
+    tm.restoreSession();
+  }
   tm.setOnClosedTabsChanged(() => rebuildApplicationMenu());
+  tm.setOnMoveTabToNewWindow((url: string) => {
+    openIncognitoWindow(url);
+  });
 
   win.webContents.once('did-finish-load', () => {
     mainLogger.info('main.incognitoWindow.ready', { windowId: win.id });
@@ -490,10 +524,61 @@ function openIncognitoWindow(): BrowserWindow {
       remaining: incognitoWindows.size,
       partition,
     });
+    // Clean up this instance from the TabManager registry.
+    tm.destroy();
     if (incognitoWindows.size === 0 && incognitoPartitionName) {
       mainLogger.info('main.incognitoWindow.clearSession', { partition });
       void clearGuestSession(incognitoPartitionName);
       incognitoPartitionName = null;
+    }
+  });
+
+  return win;
+}
+
+// ---------------------------------------------------------------------------
+// Secondary guest window — opened when a tab is detached from a guest shell.
+// Reuses the SOURCE window's existing partition so cookies/session are shared.
+// ---------------------------------------------------------------------------
+function openGuestWindow(partition: string, initialUrl?: string): BrowserWindow {
+  mainLogger.info('main.openGuestWindow', { partition, initialUrl });
+
+  const win = createShellWindow({ titleSuffix: ' (Guest)' });
+  const tm = new TabManager(win, { guest: true, partition });
+
+  if (initialUrl) {
+    tm.createTab(initialUrl);
+  } else {
+    tm.restoreSession();
+  }
+  tm.setOnClosedTabsChanged(() => rebuildApplicationMenu());
+  tm.setOnMoveTabToNewWindow((url: string) => {
+    openGuestWindow(partition, url);
+  });
+
+  win.webContents.once('did-finish-load', () => {
+    mainLogger.info('main.guestWindow.ready', { windowId: win.id });
+    win.webContents.send('window-ready');
+    win.webContents.send('guest-mode', true);
+  });
+
+  win.on('resize', () => tm.relayout());
+
+  secondaryGuestWindows.add(win);
+  mainLogger.info('main.openGuestWindow.tracked', { total: secondaryGuestWindows.size });
+
+  win.on('closed', () => {
+    secondaryGuestWindows.delete(win);
+    mainLogger.info('main.guestWindow.closed', {
+      partition,
+      remaining: secondaryGuestWindows.size,
+    });
+    tm.destroy();
+    // Only clear the partition data when BOTH the primary guest shell AND all
+    // secondary guest windows using this partition are gone.
+    if (secondaryGuestWindows.size === 0 && !isGuestSession) {
+      mainLogger.info('main.guestWindow.clearSession', { partition });
+      void clearGuestSession(partition);
     }
   });
 
@@ -1809,6 +1894,41 @@ ipcMain.handle('window:set-name', (e, name: string) => {
       }
     }
   }
+});
+
+// Tab drag-to-detach / move to new window (issue #1)
+ipcMain.handle('tabs:move-to-new-window', (e, tabId: string) => {
+  const callerWin = BrowserWindow.fromWebContents(e.sender);
+  const tm = (callerWin ? TabManager.instances.get(callerWin.id) : null) ?? tabManager;
+  if (!tm) return false;
+  const { tabs } = tm.getState();
+  if (tabs.length <= 1) return false; // Can't detach the last tab
+  const tab = tabs.find((t) => t.id === tabId);
+  if (!tab) return false;
+  // Force-close so pinned tabs are moved rather than duplicated.
+  tm.closeTab(tabId, true);
+  // Preserve the source window's session type so the detached tab stays in
+  // the same context (incognito → incognito, guest → guest, normal → normal).
+  if (callerWin && incognitoWindows.has(callerWin)) {
+    openIncognitoWindow(tab.url);
+  } else if (tm.isGuest) {
+    // Guest (non-incognito) — reuse the SOURCE window's existing partition so
+    // the detached tab shares the same cookies/session.  We must NOT call
+    // openGuestShell() here because that would (a) create a brand-new unique
+    // partition and (b) overwrite the global guestPartitionName, causing the
+    // wrong partition to be cleared when either guest window is closed.
+    const sourcePartition = tm.getGuestPartition();
+    if (sourcePartition) {
+      openGuestWindow(sourcePartition, tab.url);
+    } else {
+      // Fallback (should not happen for a properly constructed guest TabManager).
+      openGuestShell();
+      tabManager?.createTab(tab.url);
+    }
+  } else {
+    openNewWindow(tab.url);
+  }
+  return true;
 });
 
 // Issue #81 — Three-dot app menu for non-macOS platforms.
