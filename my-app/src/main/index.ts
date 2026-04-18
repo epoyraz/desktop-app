@@ -1474,7 +1474,7 @@ function buildMenuTemplate(): MenuItemConstructorOptions[] {
         { type: 'separator' },
         {
           label: 'Bookmark Manager',
-          accelerator: 'CommandOrControl+Alt+B',
+          accelerator: 'CommandOrControl+Shift+O',
           click: () => {
             mainLogger.debug('shortcuts.bookmarkManager');
             tabManager?.createTab('chrome://bookmarks');
