@@ -190,6 +190,24 @@ const config: ForgeConfig = {
           config: 'vite.preload.config.ts',
           target: 'preload',
         },
+        {
+          // Issue #37: downloads internal page preload
+          entry: 'src/preload/downloads.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
+        {
+          // Issue #26: chrome:// internal pages preload
+          entry: 'src/preload/chrome.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
+        {
+          // Issue #97: print preview preload
+          entry: 'src/preload/printPreview.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
       ],
       renderer: [
         {
@@ -226,6 +244,21 @@ const config: ForgeConfig = {
           // Issue #40: history internal page renderer
           name: 'history',
           config: 'vite.history.config.ts',
+        },
+        {
+          // Issue #37: downloads internal page renderer
+          name: 'downloads',
+          config: 'vite.downloads.config.ts',
+        },
+        {
+          // Issue #26: chrome:// internal pages renderer
+          name: 'chrome_pages',
+          config: 'vite.chrome.config.ts',
+        },
+        {
+          // Issue #97: print preview renderer
+          name: 'print_preview',
+          config: 'vite.printPreview.config.ts',
         },
       ],
     }),

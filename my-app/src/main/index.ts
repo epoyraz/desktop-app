@@ -1334,7 +1334,7 @@ ipcMain.handle('menu:show-app-menu', (_event, bounds: { x: number; y: number }) 
     },
     {
       label: 'Downloads', accelerator: 'Ctrl+J',
-      click: () => { shellWindow?.webContents.send('toggle-downloads'); },
+      click: () => { tabManager?.openInternalPage('downloads'); },
     },
     {
       label: 'Bookmarks',
