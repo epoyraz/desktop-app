@@ -11,51 +11,7 @@ import React, {
 } from 'react';
 import { OmniboxDropdown } from './OmniboxDropdown';
 import type { OmniboxSuggestion } from '../../main/omnibox/providers';
-
-// ---------------------------------------------------------------------------
-// Page info / permission types
-// ---------------------------------------------------------------------------
-interface PermissionEntry {
-  permissionType: string;
-  state: 'allow' | 'deny' | 'ask';
-}
-
-interface PageInfo {
-  url: string;
-  isHSTS: boolean;
-  hstsMaxAge: number | null;
-  hstsIncludeSubdomains: boolean;
-  isSecure: boolean;
-  cookieCount: number;
-  permissions: PermissionEntry[];
-}
-
-// ---------------------------------------------------------------------------
-// electronAPI ambient declaration (contextBridge surface)
-// ---------------------------------------------------------------------------
-declare const electronAPI: {
-  omnibox: {
-    suggest: (payload: { input: string; remoteSearch?: boolean }) => Promise<OmniboxSuggestion[]>;
-    recordSelection: (payload: { inputText: string; url: string; title: string }) => Promise<boolean>;
-    removeHistory: (id: string) => Promise<boolean>;
-  };
-  permissions: {
-    setSite: (origin: string, permissionType: string, state: string) => Promise<void>;
-  };
-  tabs: {
-    navigateActive: (input: string) => Promise<void>;
-  };
-  security: {
-    getPageInfo: () => Promise<{
-      url: string;
-      isHSTS: boolean;
-      hstsMaxAge: number | null;
-      hstsIncludeSubdomains: boolean;
-      isSecure: boolean;
-    }>;
-    getCookieCount: () => Promise<number>;
-  };
-};
+import { decode as punyDecode, toASCII } from 'punycode';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -76,8 +32,76 @@ const DEFAULT_PORTS: Record<string, number> = {
   'https:': 443,
 };
 
-// Debounce delay for omnibox suggest IPC calls (ms).
-const SUGGEST_DEBOUNCE_MS = 120;
+// ---------------------------------------------------------------------------
+// IDN / Punycode display helpers (Chrome IDN policy)
+// ---------------------------------------------------------------------------
+
+// Script ranges for mixed-script spoofing detection.
+const CYRILLIC_RE = /[\u0400-\u04FF\u0500-\u052F]/;
+const GREEK_RE = /[\u0370-\u03FF\u1F00-\u1FFF]/;
+const LATIN_RE = /[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]/;
+
+function isSafeUnicodeLabel(unicode: string): boolean {
+  const hasCyrillic = CYRILLIC_RE.test(unicode);
+  const hasGreek = GREEK_RE.test(unicode);
+  const hasLatin = LATIN_RE.test(unicode);
+  // Cyrillic or Greek mixed with Latin is a known IDN spoofing vector.
+  return !((hasCyrillic || hasGreek) && hasLatin);
+}
+
+function decodeHostnameForDisplay(hostname: string): string {
+  if (!hostname.includes('xn--')) return hostname;
+  return hostname
+    .split('.')
+    .map(label => {
+      if (!label.startsWith('xn--')) return label;
+      try {
+        const unicode = punyDecode(label.slice(4)); // strip 'xn--' prefix
+        // Round-trip validation: only show Unicode if re-encoding produces the
+        // same xn-- label. This prevents spoofing via labels like xn--google-
+        // that decode to a visually misleading string but don't round-trip.
+        if (toASCII(unicode) !== label) return label;
+        return isSafeUnicodeLabel(unicode) ? unicode : label;
+      } catch {
+        return label;
+      }
+    })
+    .join('.');
+}
+
+interface PermissionEntry {
+  permissionType: string;
+  state: 'allow' | 'deny' | 'ask';
+}
+
+interface PageInfo {
+  url: string;
+  isHSTS: boolean;
+  hstsMaxAge: number | null;
+  hstsIncludeSubdomains: boolean;
+  isSecure: boolean;
+  permissions: PermissionEntry[];
+  cookieCount: number;
+}
+
+declare const electronAPI: {
+  omnibox: {
+    suggest: (p: { input: string }) => Promise<OmniboxSuggestion[]>;
+    recordSelection: (p: { inputText: string; url: string; title: string }) => Promise<boolean>;
+    removeHistory: (id: string) => Promise<boolean>;
+  };
+  security: {
+    getPageInfo: () => Promise<Omit<PageInfo, 'permissions' | 'cookieCount'>>;
+    getCookieCount: () => Promise<number>;
+  };
+  permissions: {
+    getSite: (origin: string) => Promise<PermissionEntry[]>;
+    setSite: (origin: string, permissionType: string, state: string) => Promise<void>;
+  };
+  tabs: {
+    navigateActive: (input: string) => Promise<void>;
+  };
+};
 
 interface URLBarProps {
   url: string;
@@ -120,8 +144,8 @@ function displayUrl(url: string): string {
     return url;
   }
 
-  // Build display hostname: strip trivial subdomains.
-  let host = parsed.hostname;
+  // Build display hostname: decode IDN labels, then strip trivial subdomains.
+  let host = decodeHostnameForDisplay(parsed.hostname);
   if (TRIVIAL_SUBDOMAIN_RE.test(host)) {
     host = host.replace(TRIVIAL_SUBDOMAIN_RE, '');
   }
@@ -273,7 +297,7 @@ export function URLBar({
   const [pageInfoOpen, setPageInfoOpen] = useState(false);
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
   const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusValueRef = useRef('');
+  const suggestGenRef = useRef(0);
 
   // Sync display when URL changes externally (not while editing)
   useEffect(() => {
@@ -298,101 +322,44 @@ export function URLBar({
     return () => clearTimeout(t);
   }, [focused, onFocusClear]);
 
-  // Fetch suggestions from the omnibox IPC with debounce
-  const fetchSuggestions = useCallback((input: string): void => {
+  // Fetch suggestions on input change (debounced 80ms); empty input → ZeroSuggest
+  useEffect(() => {
+    if (!isEditing) return;
     if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
-    suggestTimerRef.current = setTimeout(() => {
-      console.log('[URLBar] omnibox:suggest', { input });
-      electronAPI.omnibox.suggest({ input }).then((results) => {
-        console.log('[URLBar] omnibox:suggest results:', results.length);
-        setSuggestions(results);
-        setDropdownOpen(results.length > 0);
+    const gen = ++suggestGenRef.current;
+    suggestTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await electronAPI.omnibox.suggest({ input: inputValue.trim() });
+        if (gen !== suggestGenRef.current) return; // stale response — newer request is in-flight
+        const limited = (results ?? []).slice(0, inputValue.trim() ? 8 : 6);
+        setSuggestions(limited);
+        setDropdownOpen(limited.length > 0);
         setSelectedIndex(-1);
-      }).catch((err: unknown) => {
-        console.warn('[URLBar] omnibox:suggest error:', err);
-      });
-    }, SUGGEST_DEBOUNCE_MS);
-  }, []);
-
-  const closeDropdown = useCallback((): void => {
-    setDropdownOpen(false);
-    setSuggestions([]);
-    setSelectedIndex(-1);
-    if (suggestTimerRef.current) {
-      clearTimeout(suggestTimerRef.current);
-      suggestTimerRef.current = null;
-    }
-  }, []);
-
-  const commitSuggestion = useCallback((suggestion: OmniboxSuggestion): void => {
-    console.log('[URLBar] omnibox selection committed:', suggestion.url);
-    onNavigate(suggestion.url);
-    // Record selection for ShortcutsProvider learning
-    electronAPI.omnibox.recordSelection({
-      inputText: inputRef.current?.value ?? '',
-      url: suggestion.url,
-      title: suggestion.title,
-    }).catch((err: unknown) => {
-      console.warn('[URLBar] omnibox:record-selection error:', err);
-    });
-    closeDropdown();
-    inputRef.current?.blur();
-  }, [onNavigate, closeDropdown]);
-
-  const handleSecurityClick = useCallback((): void => {
-    if (pageInfoOpen) {
-      setPageInfoOpen(false);
-      return;
-    }
-    console.log('[URLBar] security click: fetching page info');
-    Promise.all([
-      electronAPI.security.getPageInfo(),
-      electronAPI.security.getCookieCount(),
-    ]).then(async ([info, cookieCount]) => {
-      let permissions: PermissionEntry[] = [];
-      if (url) {
-        try {
-          // Cast to access full runtime API surface (getSite exists in preload but not declared here)
-          const api = electronAPI as unknown as {
-            permissions: { getSite: (origin: string) => Promise<Array<{ permissionType: string; state: string }>> };
-          };
-          const origin = new URL(url).origin;
-          const records = await api.permissions.getSite(origin);
-          permissions = records.map((r) => ({
-            permissionType: r.permissionType,
-            state: r.state as PermissionEntry['state'],
-          }));
-        } catch { /* ignore */ }
+      } catch {
+        if (gen === suggestGenRef.current) setSuggestions([]);
       }
-      setPageInfo({
-        url: info.url,
-        isHSTS: info.isHSTS,
-        hstsMaxAge: info.hstsMaxAge,
-        hstsIncludeSubdomains: info.hstsIncludeSubdomains,
-        isSecure: info.isSecure,
-        cookieCount,
-        permissions,
-      });
-      setPageInfoOpen(true);
-    }).catch((err: unknown) => {
-      console.warn('[URLBar] security:getPageInfo error:', err);
-    });
-  }, [pageInfoOpen, url]);
+    }, inputValue.trim() ? 80 : 0);
+    return () => {
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    };
+  }, [inputValue, isEditing]);
 
   const handleFocus = useCallback(() => {
     setIsEditing(true);
     // On focus, show the full URL so the user can edit it — except for blank
     // new-tab placeholders, where the input stays empty so typing is fresh.
-    const val = (BLANK_RE.test(url) || NEWTAB_RE.test(url)) ? '' : url;
-    setInputValue(val);
-    focusValueRef.current = val;
+    setInputValue((BLANK_RE.test(url) || NEWTAB_RE.test(url)) ? '' : url);
     inputRef.current?.select();
-    // Fetch zero-suggest immediately on focus
-    fetchSuggestions(val);
-  }, [url, fetchSuggestions]);
+  }, [url, inputValue]);
+
+  const closeDropdown = useCallback(() => {
+    setDropdownOpen(false);
+    setSuggestions([]);
+    setSelectedIndex(-1);
+  }, []);
 
   const handleBlur = useCallback(() => {
-    // Small delay so mousedown on a suggestion fires before blur closes the dropdown
+    // Delay to let click-on-suggestion fire first
     setTimeout(() => {
       setIsEditing(false);
       setInputValue(displayUrl(url));
@@ -400,47 +367,47 @@ export function URLBar({
     }, 150);
   }, [url, closeDropdown]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
-    const val = e.target.value;
-    setInputValue(val);
-    fetchSuggestions(val);
-  }, [fetchSuggestions]);
+  const confirmNavigate = useCallback((target: string, suggestion?: OmniboxSuggestion) => {
+    closeDropdown();
+    onNavigate(target);
+    if (suggestion) {
+      // Use the current controlled inputValue (not the stale editInputRef) so
+      // recordSelection always receives what the user actually typed.
+      electronAPI.omnibox.recordSelection({
+        inputText: inputValue,
+        url: suggestion.url,
+        title: suggestion.title,
+      }).catch(() => {});
+    }
+    inputRef.current?.blur();
+  }, [onNavigate, closeDropdown, inputValue]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (dropdownOpen && suggestions.length > 0) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.max(prev - 1, -1));
-          return;
-        }
-        if (e.key === 'Enter' && selectedIndex >= 0) {
-          e.preventDefault();
-          commitSuggestion(suggestions[selectedIndex]);
-          return;
-        }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, suggestions.length - 1));
+        return;
       }
-
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, -1));
+        return;
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const trimmed = inputValue.trim();
-        if (trimmed) {
-          onNavigate(trimmed);
-          closeDropdown();
-          inputRef.current?.blur();
+        const sel = suggestions[selectedIndex];
+        if (sel) {
+          confirmNavigate(sel.url, sel);
+        } else {
+          const trimmed = inputValue.trim();
+          if (trimmed) confirmNavigate(trimmed);
         }
         return;
       }
-
       if (e.key === 'Escape') {
         if (dropdownOpen) {
           closeDropdown();
-          setInputValue(focusValueRef.current);
         } else {
           setIsEditing(false);
           setInputValue(displayUrl(url));
@@ -448,23 +415,75 @@ export function URLBar({
         }
       }
     },
-    [inputValue, onNavigate, url, dropdownOpen, suggestions, selectedIndex, commitSuggestion, closeDropdown],
+    [inputValue, suggestions, selectedIndex, dropdownOpen, confirmNavigate, closeDropdown, url],
   );
 
-  const handleRemoveSuggestion = useCallback((suggestion: OmniboxSuggestion): void => {
-    console.log('[URLBar] removing omnibox history entry:', suggestion.id);
-    // Strip the "history-quick-" prefix to get the raw history id
-    const histId = suggestion.id.replace(/^history-quick-/, '').replace(/^zero-history-/, '');
-    electronAPI.omnibox.removeHistory(histId).catch((err: unknown) => {
-      console.warn('[URLBar] omnibox:remove-history error:', err);
-    });
-    setSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id));
-    if (suggestions.length <= 1) closeDropdown();
-  }, [suggestions, closeDropdown]);
+  const handleRemoveSuggestion = useCallback((s: OmniboxSuggestion) => {
+    // Match all ID prefixes that represent removable history suggestions.
+    // Providers emit: 'history-quick-<id>', 'zero-history-<id>', 'history-url-<id>-<i>',
+    // and the legacy 'history:<id>' prefix (kept for back-compat).
+    const isHistoryId =
+      s.id.startsWith('history:') ||
+      s.id.startsWith('history-quick') ||
+      s.id.startsWith('history-url') ||
+      s.id.startsWith('zero-history');
+    if (isHistoryId) {
+      // Extract the raw entry id by stripping the known provider prefix.
+      const rawId = s.id.startsWith('history:')
+        ? s.id.slice('history:'.length)
+        : s.id.startsWith('history-quick-')
+          ? s.id.slice('history-quick-'.length)
+          : s.id.startsWith('history-url-')
+            ? s.id.slice('history-url-'.length).replace(/-\d+$/, '') // strip trailing '-<i>'
+            : s.id.slice('zero-history-'.length); // zero-history-<id>
+      electronAPI.omnibox.removeHistory(rawId).catch(() => {});
+    }
+    setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
+    if (suggestions.filter((x) => x.id !== s.id).length === 0) {
+      setDropdownOpen(false);
+    }
+  }, [suggestions]);
 
   const security = getSecurityStatus(url);
   // Hide the star on blank/new-tab URLs — nothing meaningful to bookmark.
   const starVisible = !!url && !BLANK_RE.test(url) && !NEWTAB_RE.test(url);
+
+  const handleSecurityClick = useCallback(async () => {
+    if (!pageInfoOpen) {
+      try {
+        const [base, cookieCount] = await Promise.all([
+          electronAPI.security.getPageInfo(),
+          electronAPI.security.getCookieCount(),
+        ]);
+        let permissions: PermissionEntry[] = [];
+        try {
+          const origin = new URL(base.url).origin;
+          permissions = await electronAPI.permissions.getSite(origin);
+        } catch { /* non-URL pages have no permissions */ }
+        setPageInfo({ ...base, permissions, cookieCount });
+      } catch {
+        setPageInfo(null);
+      }
+    }
+    setPageInfoOpen((v) => !v);
+  }, [pageInfoOpen]);
+
+  // Close popover on navigation (URL change)
+  useEffect(() => {
+    setPageInfoOpen(false);
+  }, [url]);
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    if (!pageInfoOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (securityRef.current && !securityRef.current.closest('.url-bar__security-wrap')?.contains(e.target as Node)) {
+        setPageInfoOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [pageInfoOpen]);
 
   return (
     <div className={`url-bar url-bar--${security}`}>
@@ -522,7 +541,7 @@ export function URLBar({
         autoCorrect="off"
         autoCapitalize="off"
         placeholder="Search or enter address"
-        onChange={handleChange}
+        onChange={(e) => setInputValue(e.target.value)}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
@@ -566,7 +585,7 @@ export function URLBar({
         <OmniboxDropdown
           suggestions={suggestions}
           selectedIndex={selectedIndex}
-          onSelect={commitSuggestion}
+          onSelect={(s) => confirmNavigate(s.url, s)}
           onRemove={handleRemoveSuggestion}
           onHoverIndex={setSelectedIndex}
         />

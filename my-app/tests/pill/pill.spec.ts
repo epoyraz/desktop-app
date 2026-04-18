@@ -91,6 +91,8 @@ interface MockBrowserWindow {
     send: Mock;
     once: Mock;
     openDevTools: Mock;
+    setZoomFactor: Mock;
+    setVisualZoomLevelLimits: Mock;
   };
   on: Mock;
   once: Mock;
