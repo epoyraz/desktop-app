@@ -1215,3 +1215,350 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   ZoomBadge — toolbar badge + popover (Issue #95)
+   --------------------------------------------------------------------------- */
+.zoom-badge-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.zoom-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-default);
+  background: transparent;
+  color: var(--color-fg-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color      var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.zoom-badge:hover {
+  background: var(--color-surface-interactive-hover);
+  color: var(--color-fg-primary);
+  border-color: var(--color-border-strong);
+}
+
+.zoom-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.zoom-popover__btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-fg-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color      var(--duration-fast) var(--ease-out);
+}
+
+.zoom-popover__btn:hover:not(:disabled) {
+  background: var(--color-surface-interactive-hover);
+  color: var(--color-fg-primary);
+}
+
+.zoom-popover__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.zoom-popover__level {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-fg-primary);
+  user-select: none;
+}
+
+.zoom-popover__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border-default);
+  margin: 0 2px;
+}
+
+.zoom-popover__reset {
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-fg-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color      var(--duration-fast) var(--ease-out);
+}
+
+.zoom-popover__reset:hover {
+  background: var(--color-surface-interactive-hover);
+  color: var(--color-fg-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-badge,
+  .zoom-popover__btn,
+  .zoom-popover__reset {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Password Prompt Bar
+   --------------------------------------------------------------------------- */
+.password-prompt-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border-default);
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-primary);
+  animation: password-bar-slide-in 150ms ease-out;
+}
+
+@keyframes password-bar-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.password-prompt-bar__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.password-prompt-bar__icon {
+  flex-shrink: 0;
+  color: var(--color-fg-secondary);
+}
+
+.password-prompt-bar__message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-fg-secondary);
+}
+
+.password-prompt-bar__message strong {
+  color: var(--color-fg-primary);
+  font-weight: 500;
+}
+
+.password-prompt-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.password-prompt-bar__btn {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out;
+  white-space: nowrap;
+}
+
+.password-prompt-bar__btn--primary {
+  background: var(--color-accent-default);
+  color: var(--color-bg-base);
+}
+
+.password-prompt-bar__btn--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.password-prompt-bar__btn--secondary {
+  background: transparent;
+  color: var(--color-fg-secondary);
+}
+
+.password-prompt-bar__btn--secondary:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg-primary);
+}
+
+.password-prompt-bar__dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+
+.password-prompt-bar__dismiss:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg-primary);
+}
+
+/* ---------------------------------------------------------------------------
+   PermissionBar — infobar prompt anchored below toolbar
+   --------------------------------------------------------------------------- */
+.permission-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border-subtle);
+  gap: 8px;
+  animation: permission-bar-slide-in 150ms ease-out;
+}
+
+@keyframes permission-bar-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.permission-bar__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.permission-bar__icon {
+  flex-shrink: 0;
+  color: var(--color-fg-secondary);
+}
+
+.permission-bar__message {
+  font-size: 12px;
+  color: var(--color-fg-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.permission-bar__message strong {
+  font-weight: 600;
+  color: var(--color-fg-primary);
+}
+
+.permission-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.permission-bar__btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--color-border-subtle);
+  transition: background 150ms ease-out, border-color 150ms ease-out;
+  line-height: 1.4;
+}
+
+.permission-bar__btn--primary {
+  background: var(--color-accent-default);
+  color: var(--color-fg-on-accent);
+  border-color: var(--color-accent-default);
+}
+
+.permission-bar__btn--primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.permission-bar__btn--secondary {
+  background: var(--color-bg-base);
+  color: var(--color-fg-secondary);
+}
+
+.permission-bar__btn--secondary:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg-primary);
+}
+
+.permission-bar__dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+
+.permission-bar__dismiss:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg-primary);
+}

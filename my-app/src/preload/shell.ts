@@ -13,6 +13,7 @@ import type {
 } from '../main/bookmarks/BookmarkStore';
 import type { PermissionRecord, PermissionType, PermissionState } from '../main/permissions/PermissionStore';
 import type { PermissionPromptRequest } from '../main/permissions/PermissionManager';
+import type { DownloadItemDTO } from '../main/downloads/DownloadManager';
 
 // ---------------------------------------------------------------------------
 // Type re-exports for renderer consumption
@@ -29,6 +30,7 @@ export type {
   PermissionType,
   PermissionState,
   PermissionPromptRequest,
+  DownloadItemDTO,
 };
 
 // ---------------------------------------------------------------------------
@@ -163,6 +165,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: (): Promise<void> => ipcRenderer.invoke('find:stop'),
     getLastQuery: (): Promise<string> =>
       ipcRenderer.invoke('find:get-last-query'),
+  },
+
+  // Downloads
+  downloads: {
+    getAll: (): Promise<DownloadItemDTO[]> =>
+      ipcRenderer.invoke('downloads:get-all'),
+    pause: (id: string): Promise<void> =>
+      ipcRenderer.invoke('downloads:pause', id),
+    resume: (id: string): Promise<void> =>
+      ipcRenderer.invoke('downloads:resume', id),
+    cancel: (id: string): Promise<void> =>
+      ipcRenderer.invoke('downloads:cancel', id),
+    openFile: (id: string): Promise<void> =>
+      ipcRenderer.invoke('downloads:open-file', id),
+    showInFolder: (id: string): Promise<void> =>
+      ipcRenderer.invoke('downloads:show-in-folder', id),
+    setOpenWhenDone: (id: string, value: boolean): Promise<void> =>
+      ipcRenderer.invoke('downloads:set-open-when-done', id, value),
+    clearCompleted: (): Promise<void> =>
+      ipcRenderer.invoke('downloads:clear-completed'),
+    getShowOnComplete: (): Promise<boolean> =>
+      ipcRenderer.invoke('downloads:get-show-on-complete'),
+    setShowOnComplete: (value: boolean): Promise<void> =>
+      ipcRenderer.invoke('downloads:set-show-on-complete', value),
   },
 
   // Permissions — renderer -> main decision relay + query API
@@ -376,6 +402,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ) => cb(payload);
       ipcRenderer.on('password-form-detected', handler);
       return () => ipcRenderer.removeListener('password-form-detected', handler);
+    },
+
+    // Download events from DownloadManager
+    downloadStarted: (
+      cb: (dl: DownloadItemDTO) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, dl: DownloadItemDTO) => cb(dl);
+      ipcRenderer.on('download-started', handler);
+      return () => ipcRenderer.removeListener('download-started', handler);
+    },
+
+    downloadProgress: (
+      cb: (dl: DownloadItemDTO) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, dl: DownloadItemDTO) => cb(dl);
+      ipcRenderer.on('download-progress', handler);
+      return () => ipcRenderer.removeListener('download-progress', handler);
+    },
+
+    downloadDone: (
+      cb: (dl: DownloadItemDTO) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, dl: DownloadItemDTO) => cb(dl);
+      ipcRenderer.on('download-done', handler);
+      return () => ipcRenderer.removeListener('download-done', handler);
+    },
+
+    downloadsState: (
+      cb: (downloads: DownloadItemDTO[]) => void,
+    ): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, downloads: DownloadItemDTO[]) => cb(downloads);
+      ipcRenderer.on('downloads-state', handler);
+      return () => ipcRenderer.removeListener('downloads-state', handler);
     },
   },
 

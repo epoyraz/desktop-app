@@ -354,6 +354,15 @@ export function WindowChrome(): React.ReactElement {
           onToggleBookmark={handleStarClick}
         />
 
+
+        {zoomPercent !== 100 && (
+          <ZoomBadge
+            percent={zoomPercent}
+            onZoomIn={() => electronAPI.zoom.zoomIn()}
+            onZoomOut={() => electronAPI.zoom.zoomOut()}
+            onReset={() => electronAPI.zoom.reset()}
+          />
+        )}
         <ProfileMenu />
       </div>
 

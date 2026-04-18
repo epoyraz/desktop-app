@@ -47,6 +47,14 @@ import { registerBookmarkHandlers, unregisterBookmarkHandlers } from './bookmark
 // Password Manager
 import { PasswordStore } from './passwords/PasswordStore';
 import { registerPasswordHandlers, unregisterPasswordHandlers } from './passwords/ipc';
+// Issue #45 — Profile picker
+import { ProfileStore } from './profiles/ProfileStore';
+import { registerProfileHandlers, unregisterProfileHandlers } from './profiles/ipc';
+import { createProfilePickerWindow, closeProfilePickerWindow } from './profiles/ProfilePickerWindow';
+// Permissions framework
+import { PermissionStore } from './permissions/PermissionStore';
+import { PermissionManager } from './permissions/PermissionManager';
+import { registerPermissionHandlers, unregisterPermissionHandlers } from './permissions/ipc';
 
 // ---------------------------------------------------------------------------
 // Crash telemetry: catch unhandled errors before anything else
@@ -107,6 +115,9 @@ let tabManager: TabManager | null = null;
 let onboardingWindow: BrowserWindow | null = null;
 let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
+let profileStore: ProfileStore | null = null;
+let permissionStore: PermissionStore | null = null;
+let permissionManager: PermissionManager | null = null;
 
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({ clientId: process.env.GOOGLE_CLIENT_ID ?? 'PLACEHOLDER_CLIENT_ID' });
@@ -128,6 +139,24 @@ function openShellAndWire(): BrowserWindow {
     });
   }
   tabManager.restoreSession();
+
+  // Permission framework: wire manager to session + tab lifecycle
+  if (permissionStore && tabManager) {
+    const tm = tabManager;
+    permissionManager = new PermissionManager({
+      store: permissionStore,
+      getShellWindow: () => shellWindow,
+      getTabIdForWebContents: (wcId: number) => tm.getTabIdForWebContentsId(wcId),
+    });
+    tm.setOnTabClosed((tabId: string) => {
+      permissionManager?.expireSessionGrants(tabId);
+    });
+    registerPermissionHandlers({
+      store: permissionStore,
+      manager: permissionManager,
+      getShellWindow: () => shellWindow,
+    });
+  }
 
   // History menu's "Recently Closed" submenu is dynamic — rebuild the whole
   // app menu whenever the closed-tabs stack mutates so the submenu reflects
@@ -205,6 +234,7 @@ app.whenReady().then(async () => {
 
   // Wave1 P3 — Bookmarks: init store + register IPC before the shell loads.
   bookmarkStore = new BookmarkStore();
+  permissionStore = new PermissionStore();
   registerBookmarkHandlers({
     store: bookmarkStore,
     getShellWindow: () => shellWindow,
@@ -215,6 +245,16 @@ app.whenReady().then(async () => {
   // Password Manager: init store + register IPC
   passwordStore = new PasswordStore();
   registerPasswordHandlers({ store: passwordStore });
+
+  // Issue #45 — Profile picker: init store + register IPC
+  profileStore = new ProfileStore();
+  registerProfileHandlers({
+    profileStore,
+    onProfileSelected: (profileId) => {
+      mainLogger.info("main.profileSelected", { profileId });
+      openShellAndWire();
+    },
+  });
 
   // pill:submit — spawns a Docker container with the agent loop.
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
@@ -282,6 +322,22 @@ app.whenReady().then(async () => {
   // Track 5 — Settings IPC handlers
   registerSettingsHandlers({ accountStore, keychainStore });
 
+  // Issue #95 — Settings zoom override IPC (needs tabManager access)
+  ipcMain.handle('settings:get-zoom-overrides', () => {
+    if (!tabManager) return [];
+    return tabManager.getZoomOverrides();
+  });
+
+  ipcMain.handle('settings:remove-zoom-override', (_e, origin: string) => {
+    if (!tabManager) return false;
+    return tabManager.removeZoomOverride(origin);
+  });
+
+  ipcMain.handle('settings:clear-all-zoom-overrides', () => {
+    if (!tabManager) return;
+    tabManager.clearAllZoomOverrides();
+  });
+
   // SETTINGS_STANDALONE mode: open settings window for design review
   if (process.env.SETTINGS_STANDALONE === '1') {
     mainLogger.info('main.settingsStandalone', {
@@ -322,9 +378,19 @@ app.whenReady().then(async () => {
     });
 
   } else {
-    // Returning user — open shell directly
-    mainLogger.info('main.onboardingGate.returning', { msg: 'Opening shell window (account.json present)' });
-    openShellAndWire();
+    // Returning user — check if profile picker should be shown
+    const showProfilePicker = profileStore?.getShowPickerOnLaunch() ?? false;
+    mainLogger.info('main.onboardingGate.returning', {
+      msg: 'Returning user',
+      showProfilePicker,
+    });
+
+    if (showProfilePicker) {
+      mainLogger.info('main.profilePicker.show', { msg: 'Showing profile picker on launch' });
+      createProfilePickerWindow();
+    } else {
+      openShellAndWire();
+    }
   }
 
 
@@ -335,6 +401,7 @@ app.whenReady().then(async () => {
     tabManager?.flushSession();
     tabManager?.flushZoom();
     bookmarkStore?.flushSync();
+    permissionStore?.flushSync();
     await teardownHl();
   });
 
@@ -343,7 +410,12 @@ app.whenReady().then(async () => {
   app.on('will-quit', () => {
     unregisterHotkeys();
     unregisterSettingsHandlers();
+    ipcMain.removeHandler('settings:get-zoom-overrides');
+    ipcMain.removeHandler('settings:remove-zoom-override');
+    ipcMain.removeHandler('settings:clear-all-zoom-overrides');
     unregisterBookmarkHandlers();
+    unregisterProfileHandlers();
+    unregisterPermissionHandlers();
   });
 
   app.on('activate', () => {

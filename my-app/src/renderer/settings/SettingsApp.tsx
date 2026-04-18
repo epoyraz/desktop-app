@@ -30,6 +30,8 @@ const TAB_APPEARANCE   = 'appearance'  as const;
 const TAB_SCOPES       = 'scopes'      as const;
 const TAB_DANGER       = 'danger'      as const;
 const TAB_PRIVACY      = 'privacy'     as const;
+const TAB_PASSWORDS    = 'passwords'   as const;
+const TAB_ZOOM         = 'site-zoom'   as const;
 
 type TabId =
   | typeof TAB_API_KEY
@@ -37,6 +39,7 @@ type TabId =
   | typeof TAB_APPEARANCE
   | typeof TAB_SCOPES
   | typeof TAB_PRIVACY
+  | typeof TAB_ZOOM
   | typeof TAB_DANGER;
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -44,7 +47,9 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: TAB_AGENT,      label: 'Agent' },
   { id: TAB_APPEARANCE, label: 'Appearance' },
   { id: TAB_SCOPES,     label: 'Google Scopes' },
+  { id: TAB_PASSWORDS,  label: 'Passwords' },
   { id: TAB_PRIVACY,    label: 'Privacy and security' },
+  { id: TAB_ZOOM,       label: 'Site Zoom' },
   { id: TAB_DANGER,     label: 'Danger Zone' },
 ];
 
@@ -92,6 +97,9 @@ declare global {
         notes: Record<string, string>;
       }>;
       onOpenClearDataDialog: (handler: () => void) => () => void;
+      getZoomOverrides: () => Promise<Array<{ origin: string; zoomLevel: number }>>;
+      removeZoomOverride: (origin: string) => Promise<boolean>;
+      clearAllZoomOverrides: () => Promise<void>;
       closeWindow: () => void;
     };
   }
@@ -595,6 +603,332 @@ function PrivacyTab({ openDialog, onDialogChange }: PrivacyTabProps): React.Reac
 }
 
 // ---------------------------------------------------------------------------
+// Site Zoom tab
+// ---------------------------------------------------------------------------
+
+function zoomLevelToPercent(level: number): number {
+  return Math.round(Math.pow(1.2, level) * 100);
+}
+
+function SiteZoomTab(): React.ReactElement {
+  const toast = useToast();
+  const [overrides, setOverrides] = useState<Array<{ origin: string; zoomLevel: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadOverrides = useCallback(async () => {
+    const data = await window.settingsAPI.getZoomOverrides();
+    setOverrides(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadOverrides();
+  }, [loadOverrides]);
+
+  async function handleRemove(origin: string): Promise<void> {
+    const ok = await window.settingsAPI.removeZoomOverride(origin);
+    if (ok) {
+      setOverrides((prev) => prev.filter((o) => o.origin !== origin));
+      toast.show({ variant: 'success', title: 'Zoom override removed' });
+    }
+  }
+
+  async function handleClearAll(): Promise<void> {
+    await window.settingsAPI.clearAllZoomOverrides();
+    setOverrides([]);
+    toast.show({ variant: 'success', title: 'All zoom overrides cleared' });
+  }
+
+  if (loading) {
+    return (
+      <div className="settings-section">
+        <h2 className="settings-section-title">Site Zoom</h2>
+        <div className="settings-loading">
+          <Spinner size="md" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Site Zoom</h2>
+      <p className="settings-section-desc">
+        Per-site zoom levels persist across sessions. Remove overrides to
+        reset individual sites back to 100%.
+      </p>
+
+      {overrides.length === 0 ? (
+        <Card variant="outline" padding="md" className="settings-card">
+          <p style={{ color: 'var(--color-fg-tertiary)', fontSize: 13 }}>
+            No per-site zoom overrides saved.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <Card variant="default" padding="none" className="settings-card">
+            {overrides.map((entry, idx) => (
+              <div
+                key={entry.origin}
+                className={`settings-scope-row ${idx < overrides.length - 1 ? 'settings-scope-row--bordered' : ''}`}
+              >
+                <div className="settings-scope-info">
+                  <span className="settings-scope-label" style={{ fontFamily: 'var(--font-ui)' }}>
+                    {entry.origin}
+                  </span>
+                  <span className="settings-scope-name">
+                    {zoomLevelToPercent(entry.zoomLevel)}%
+                  </span>
+                </div>
+                <div className="settings-scope-actions">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleRemove(entry.origin)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </Card>
+
+          <div style={{ marginTop: 12 }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleClearAll()}
+            >
+              Clear all overrides
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Passwords tab
+// ---------------------------------------------------------------------------
+
+interface PasswordEntry {
+  id: string;
+  origin: string;
+  username: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+function PasswordsTab(): React.ReactElement {
+  const toast = useToast();
+  const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
+  const [neverSave, setNeverSave] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [revealedPw, setRevealedPw] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+
+  const loadData = useCallback(async () => {
+    const [pw, ns] = await Promise.all([
+      window.settingsAPI.listPasswords(),
+      window.settingsAPI.listNeverSave(),
+    ]);
+    setPasswords(pw);
+    setNeverSave(ns);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  const filtered = passwords.filter((p) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return p.origin.toLowerCase().includes(q) || p.username.toLowerCase().includes(q);
+  });
+
+  async function handleReveal(id: string): Promise<void> {
+    if (revealedId === id) {
+      setRevealedId(null);
+      setRevealedPw(null);
+      return;
+    }
+    const pw = await window.settingsAPI.revealPassword(id);
+    setRevealedId(id);
+    setRevealedPw(pw);
+  }
+
+  async function handleCopy(id: string): Promise<void> {
+    const pw = await window.settingsAPI.revealPassword(id);
+    if (pw) {
+      await navigator.clipboard.writeText(pw);
+      toast.show({ variant: 'success', title: 'Password copied' });
+    }
+  }
+
+  async function handleDelete(id: string): Promise<void> {
+    await window.settingsAPI.deletePassword(id);
+    setPasswords((prev) => prev.filter((p) => p.id !== id));
+    toast.show({ variant: 'success', title: 'Password deleted' });
+  }
+
+  function startEdit(entry: PasswordEntry): void {
+    setEditId(entry.id);
+    setEditUsername(entry.username);
+    setEditPassword('');
+  }
+
+  async function handleEditSave(): Promise<void> {
+    if (!editId) return;
+    const updates: { username?: string; password?: string } = {};
+    if (editUsername) updates.username = editUsername;
+    if (editPassword) updates.password = editPassword;
+    await window.settingsAPI.updatePassword({ id: editId, ...updates });
+    setEditId(null);
+    setEditUsername('');
+    setEditPassword('');
+    void loadData();
+    toast.show({ variant: 'success', title: 'Password updated' });
+  }
+
+  async function handleRemoveNeverSave(origin: string): Promise<void> {
+    await window.settingsAPI.removeNeverSave(origin);
+    setNeverSave((prev) => prev.filter((o) => o !== origin));
+    toast.show({ variant: 'success', title: 'Removed from never-save list' });
+  }
+
+  if (loading) {
+    return (
+      <div className="settings-section">
+        <h2 className="settings-section-title">Passwords</h2>
+        <div className="settings-loading"><Spinner size="md" /></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Passwords</h2>
+      <p className="settings-section-desc">
+        Manage saved passwords and sites that never save passwords.
+      </p>
+
+      {/* Search */}
+      <div className="settings-field" style={{ marginBottom: 16 }}>
+        <input
+          className="settings-input"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search passwords..."
+        />
+      </div>
+
+      {/* Saved passwords */}
+      <Card variant="default" padding="none" className="settings-card">
+        {filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-fg-tertiary)' }}>
+            {passwords.length === 0 ? 'No saved passwords' : 'No matching passwords'}
+          </div>
+        ) : (
+          filtered.map((entry, idx) => (
+            <div
+              key={entry.id}
+              className={`settings-scope-row ${idx < filtered.length - 1 ? 'settings-scope-row--bordered' : ''}`}
+            >
+              {editId === entry.id ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 0' }}>
+                  <input
+                    className="settings-input"
+                    type="text"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    placeholder="Username"
+                  />
+                  <input
+                    className="settings-input"
+                    type="password"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="New password (leave blank to keep)"
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button variant="primary" size="sm" onClick={() => void handleEditSave()}>
+                      Save
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setEditId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="settings-scope-info">
+                    <span className="settings-scope-label">{entry.origin}</span>
+                    <code className="settings-scope-name">{entry.username}</code>
+                    {revealedId === entry.id && revealedPw !== null && (
+                      <code className="settings-scope-name" style={{ color: 'var(--color-fg-primary)' }}>
+                        {revealedPw}
+                      </code>
+                    )}
+                  </div>
+                  <div className="settings-scope-actions" style={{ gap: 4 }}>
+                    <Button variant="ghost" size="sm" onClick={() => void handleReveal(entry.id)}>
+                      {revealedId === entry.id ? 'Hide' : 'Reveal'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => void handleCopy(entry.id)}>
+                      Copy
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => startEdit(entry)}>
+                      Edit
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => void handleDelete(entry.id)}>
+                      Delete
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))
+        )}
+      </Card>
+
+      {/* Never-save list */}
+      {neverSave.length > 0 && (
+        <>
+          <h3 className="settings-section-title" style={{ marginTop: 24, fontSize: 14 }}>
+            Never saved
+          </h3>
+          <p className="settings-section-desc">
+            Passwords will never be saved for these sites.
+          </p>
+          <Card variant="outline" padding="none" className="settings-card">
+            {neverSave.map((origin, idx) => (
+              <div
+                key={origin}
+                className={`settings-scope-row ${idx < neverSave.length - 1 ? 'settings-scope-row--bordered' : ''}`}
+              >
+                <div className="settings-scope-info">
+                  <span className="settings-scope-label">{origin}</span>
+                </div>
+                <div className="settings-scope-actions">
+                  <Button variant="ghost" size="sm" onClick={() => void handleRemoveNeverSave(origin)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Danger Zone tab
 // ---------------------------------------------------------------------------
 
@@ -745,7 +1079,9 @@ function SettingsInner(): React.ReactElement {
     [TAB_AGENT]:      <AgentTab />,
     [TAB_APPEARANCE]: <AppearanceTab />,
     [TAB_SCOPES]:     <GoogleScopesTab />,
+    [TAB_PASSWORDS]:  <PasswordsTab />,
     [TAB_PRIVACY]:    <PrivacyTab openDialog={clearDataOpen} onDialogChange={setClearDataOpen} />,
+    [TAB_ZOOM]:       <SiteZoomTab />,
     [TAB_DANGER]:     <DangerZoneTab />,
   };
 

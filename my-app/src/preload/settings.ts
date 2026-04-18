@@ -85,8 +85,32 @@ export interface SettingsAPI {
    *  Returns an unsubscribe function. */
   onOpenClearDataDialog: (handler: () => void) => () => void;
 
+  /** List all per-site zoom overrides */
+  getZoomOverrides: () => Promise<Array<{ origin: string; zoomLevel: number }>>;
+
+  /** Remove a per-site zoom override */
+  removeZoomOverride: (origin: string) => Promise<boolean>;
+
+  /** Clear all per-site zoom overrides */
+  clearAllZoomOverrides: () => Promise<void>;
+
+  /** Get whether profile picker shows on launch */
+  getShowProfilePicker: () => Promise<boolean>;
+
+  /** Set whether profile picker shows on launch */
+  setShowProfilePicker: (show: boolean) => Promise<void>;
+
   /** Close the settings window */
   closeWindow: () => void;
+
+  // Password manager
+  listPasswords: () => Promise<Array<{ id: string; origin: string; username: string; createdAt: number; updatedAt: number }>>;
+  revealPassword: (id: string) => Promise<string | null>;
+  updatePassword: (payload: { id: string; username?: string; password?: string }) => Promise<boolean>;
+  deletePassword: (id: string) => Promise<boolean>;
+  deleteAllPasswords: () => Promise<void>;
+  listNeverSave: () => Promise<string[]>;
+  removeNeverSave: (origin: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,9 +188,69 @@ const api: SettingsAPI = {
     };
   },
 
+  getZoomOverrides: async (): Promise<Array<{ origin: string; zoomLevel: number }>> => {
+    console.debug('[settings-preload] getZoomOverrides');
+    return ipcRenderer.invoke('settings:get-zoom-overrides') as Promise<Array<{ origin: string; zoomLevel: number }>>;
+  },
+
+  removeZoomOverride: async (origin: string): Promise<boolean> => {
+    console.debug('[settings-preload] removeZoomOverride', { origin });
+    return ipcRenderer.invoke('settings:remove-zoom-override', origin) as Promise<boolean>;
+  },
+
+  clearAllZoomOverrides: async (): Promise<void> => {
+    console.debug('[settings-preload] clearAllZoomOverrides');
+    await ipcRenderer.invoke('settings:clear-all-zoom-overrides');
+  },
+
+  getShowProfilePicker: async (): Promise<boolean> => {
+    console.debug('[settings-preload] getShowProfilePicker');
+    return ipcRenderer.invoke('profiles:get-show-picker') as Promise<boolean>;
+  },
+
+  setShowProfilePicker: async (show: boolean): Promise<void> => {
+    console.debug('[settings-preload] setShowProfilePicker', { show });
+    await ipcRenderer.invoke('profiles:set-show-picker', show);
+  },
+
   closeWindow: (): void => {
     console.debug('[settings-preload] closeWindow');
     ipcRenderer.send('settings:close-window');
+  },
+
+  listPasswords: async () => {
+    console.debug('[settings-preload] listPasswords');
+    return ipcRenderer.invoke('passwords:list');
+  },
+
+  revealPassword: async (id: string) => {
+    console.debug('[settings-preload] revealPassword', { id });
+    return ipcRenderer.invoke('passwords:reveal', id);
+  },
+
+  updatePassword: async (payload: { id: string; username?: string; password?: string }) => {
+    console.debug('[settings-preload] updatePassword', { id: payload.id });
+    return ipcRenderer.invoke('passwords:update', payload);
+  },
+
+  deletePassword: async (id: string) => {
+    console.debug('[settings-preload] deletePassword', { id });
+    return ipcRenderer.invoke('passwords:delete', id);
+  },
+
+  deleteAllPasswords: async () => {
+    console.debug('[settings-preload] deleteAllPasswords');
+    return ipcRenderer.invoke('passwords:delete-all');
+  },
+
+  listNeverSave: async () => {
+    console.debug('[settings-preload] listNeverSave');
+    return ipcRenderer.invoke('passwords:list-never-save');
+  },
+
+  removeNeverSave: async (origin: string) => {
+    console.debug('[settings-preload] removeNeverSave', { origin });
+    return ipcRenderer.invoke('passwords:remove-never-save', origin);
   },
 };
 
