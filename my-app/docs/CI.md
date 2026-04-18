@@ -89,10 +89,21 @@ choice because the baseline is already red:
   mismatches, `llm.py` None-vs-Anthropic assignment, `loop.py` `Any`
   returns.
 
+The same soft-fail treatment applies to the Playwright jobs in `e2e.yml`:
+
+- **`regression`** — `preload-path.spec.ts` fails with
+  `electron.launch: Timeout 30000ms exceeded` both on CI and locally.
+  The Electron process starts and attaches the debugger, but the
+  `_electron.launch()` promise never resolves. Suspected cause is a
+  missing init step (perhaps daemon spawn or a renderer ready signal
+  that the packaged build doesn't emit when launched outside a real
+  UI session). Soft-fail until debugged.
+- **`e2e-smoke`** — same launch hang, same fix.
+
 ### Flipping to hard-fail
 
-When the baseline is clean, remove `continue-on-error: true` from both
-jobs. The comments in `ci.yml` mark the exact lines.
+When a baseline is clean, remove `continue-on-error: true` from its job.
+The comments in each workflow mark the exact lines.
 
 ### Preventing regression while soft
 
