@@ -18,8 +18,6 @@ import { ProfileMenu } from './ProfileMenu';
 import { DownloadButton } from './DownloadButton';
 import { DownloadBubble } from './DownloadBubble';
 import { AppMenuButton } from './AppMenuButton';
-import { SidePanel, SidePanelToggleButton } from './SidePanel';
-import type { SidePanelId, SidePanelPosition } from './SidePanel';
 import type {
   TabManagerState,
   TabState,
@@ -33,9 +31,9 @@ import type {
 import type { DownloadItemDTO } from '../../main/downloads/DownloadManager';
 
 // Layout constants — keep in sync with shell.css.
-const BASE_CHROME_HEIGHT = 82;
+const BASE_CHROME_HEIGHT = 76;
 const BOOKMARKS_BAR_HEIGHT = 32;
-const DEFAULT_SIDE_PANEL_WIDTH = 340;
+const DROPDOWN_OVERFLOW_HEIGHT = 300;
 // Any tab URL starting with this scheme is a new-tab placeholder; the
 // bookmarks bar treats those as "NTP" for the 'ntp-only' visibility mode.
 const NTP_URL_RE = /^(data:|about:blank$)/i;
@@ -153,6 +151,7 @@ export function WindowChrome(): React.ReactElement {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [urlBarFocused, setUrlBarFocused] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Bookmarks state
   const [bookmarksTree, setBookmarksTree] = useState<PersistedBookmarks | null>(null);
@@ -164,12 +163,6 @@ export function WindowChrome(): React.ReactElement {
   const [bubbleOpen, setBubbleOpen] = useState(false);
   const [showOnComplete, setShowOnComplete] = useState(true);
   const autoDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Side panel state
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [sidePanelActiveId, setSidePanelActiveId] = useState<SidePanelId>('bookmarks');
-  const [sidePanelPosition, setSidePanelPosition] = useState<SidePanelPosition>('right');
-  const [sidePanelWidth, setSidePanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH);
 
   // Derived active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -231,20 +224,12 @@ export function WindowChrome(): React.ReactElement {
     });
   }, []);
 
-  // Push total chrome height to main whenever bar visibility changes so the
-  // WebContentsView repositions correctly.
+  // Push total chrome height to main whenever bar visibility or dropdown changes
+  // so the WebContentsView repositions correctly.
   useEffect(() => {
-    const total = BASE_CHROME_HEIGHT + (barVisible ? BOOKMARKS_BAR_HEIGHT : 0);
+    const total = BASE_CHROME_HEIGHT + (barVisible ? BOOKMARKS_BAR_HEIGHT : 0) + (dropdownOpen ? DROPDOWN_OVERFLOW_HEIGHT : 0);
     electronAPI.shell.setChromeHeight(total);
-  }, [barVisible]);
-
-  // Push side panel width to main whenever panel open state or width changes
-  useEffect(() => {
-    const effectiveWidth = sidePanelOpen ? sidePanelWidth : 0;
-    console.log('[WindowChrome] Side panel width changed:', effectiveWidth, 'position:', sidePanelPosition);
-    electronAPI.shell.setSidePanelWidth(effectiveWidth);
-    electronAPI.shell.setSidePanelPosition(sidePanelPosition);
-  }, [sidePanelOpen, sidePanelWidth, sidePanelPosition]);
+  }, [barVisible, dropdownOpen]);
 
   // ---------------------------------------------------------------------------
   // IPC event subscriptions
@@ -430,9 +415,9 @@ export function WindowChrome(): React.ReactElement {
   }, []);
 
   const handleStarClick = useCallback(() => {
-    if (!activeUrl) return;
+    if (!activeUrl || !bookmarksTree) return;
     setBookmarkDialogOpen(true);
-  }, [activeUrl]);
+  }, [activeUrl, bookmarksTree]);
 
   // ---------------------------------------------------------------------------
   // Download actions
@@ -448,31 +433,6 @@ export function WindowChrome(): React.ReactElement {
   const handleSetShowOnComplete = useCallback((value: boolean) => {
     setShowOnComplete(value);
     electronAPI.downloads.setShowOnComplete(value);
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Side panel actions
-  // ---------------------------------------------------------------------------
-  const handleSidePanelToggle = useCallback(() => {
-    setSidePanelOpen((prev) => {
-      const next = !prev;
-      console.log('[WindowChrome] Side panel toggled:', next ? 'open' : 'closed');
-      return next;
-    });
-  }, []);
-
-  const handleSidePanelClose = useCallback(() => {
-    console.log('[WindowChrome] Side panel closed');
-    setSidePanelOpen(false);
-  }, []);
-
-  const handleSidePanelSelect = useCallback((id: SidePanelId) => {
-    console.log('[WindowChrome] Side panel selected:', id);
-    setSidePanelActiveId(id);
-  }, []);
-
-  const handleSidePanelWidthChange = useCallback((width: number) => {
-    setSidePanelWidth(width);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -550,12 +510,7 @@ export function WindowChrome(): React.ReactElement {
           )}
         </div>
 
-        <SidePanelToggleButton
-          isOpen={sidePanelOpen}
-          onClick={handleSidePanelToggle}
-        />
-
-        <ProfileMenu />
+        <ProfileMenu onDropdownChange={setDropdownOpen} />
         <AppMenuButton />
       </div>
 
@@ -572,7 +527,7 @@ export function WindowChrome(): React.ReactElement {
         />
       )}
 
-      {bookmarkDialogOpen && activeUrl && (
+      {bookmarkDialogOpen && activeUrl && bookmarksTree && (
         <BookmarkDialog
           url={activeUrl}
           title={activeTab?.title ?? ''}
@@ -585,17 +540,6 @@ export function WindowChrome(): React.ReactElement {
       <PermissionBar activeTabId={activeTabId} />
       <PasswordPromptBar activeTabId={activeTabId} />
       <FindBar activeTabId={activeTabId} />
-
-      <SidePanel
-        open={sidePanelOpen}
-        activePanel={sidePanelActiveId}
-        position={sidePanelPosition}
-        width={sidePanelWidth}
-        activeTabId={activeTabId}
-        onClose={handleSidePanelClose}
-        onSelectPanel={handleSidePanelSelect}
-        onWidthChange={handleSidePanelWidthChange}
-      />
     </div>
   );
 }

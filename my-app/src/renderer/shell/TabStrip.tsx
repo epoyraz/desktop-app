@@ -16,6 +16,18 @@ declare const electronAPI: {
 // Constants
 // ---------------------------------------------------------------------------
 const DRAG_THRESHOLD_PX = 4;
+const GOOGLE_FAVICON_API = 'https://www.google.com/s2/favicons?sz=32&domain_url=';
+
+function faviconSrc(tab: TabState): string | null {
+  if (tab.favicon) return tab.favicon;
+  try {
+    const parsed = new URL(tab.url);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return GOOGLE_FAVICON_API + encodeURIComponent(parsed.origin);
+    }
+  } catch { /* ignore invalid URLs */ }
+  return null;
+}
 
 interface TabStripProps {
   tabs: TabState[];
@@ -55,6 +67,7 @@ function TabItem({
   onContextMenu,
 }: TabItemProps): React.ReactElement {
   const isPinned = tab.pinned;
+  const favicon = faviconSrc(tab);
   return (
     <div
       className={[
@@ -89,8 +102,8 @@ function TabItem({
             <path d="M11 5.5c.8.8 1.2 1.8 1.2 2.5s-.4 1.7-1.2 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             <path d="M12.5 3.5C14 5 14.8 6.8 14.8 8s-.8 3-2.3 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
           </svg>
-        ) : tab.favicon ? (
-          <img src={tab.favicon} alt="" width={14} height={14} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        ) : favicon ? (
+          <img src={favicon} alt="" width={16} height={16} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         ) : (
           <span className="tab-item__favicon-placeholder" />
         )}

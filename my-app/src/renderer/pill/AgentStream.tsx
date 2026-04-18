@@ -35,6 +35,37 @@ function safePreview(x: unknown, max = 80): string {
   } catch { return String(x).slice(0, max); }
 }
 
+function renderInlineMarkdown(text: string): React.ReactElement {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|`(.+?)`|\*(.+?)\*)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    if (match[2]) parts.push(<strong key={key++}>{match[2]}</strong>);
+    else if (match[3]) parts.push(<code key={key++} className="pill-stream-inline-code">{match[3]}</code>);
+    else if (match[4]) parts.push(<em key={key++}>{match[4]}</em>);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
+function ThinkingBlock({ text }: { text: string }): React.ReactElement {
+  const lines = text.split('\n');
+  return (
+    <div className="pill-stream-entry pill-stream-entry--thinking">
+      {lines.map((line, i) => {
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          return <div key={i} className="pill-stream-md-li">{renderInlineMarkdown(line.slice(2))}</div>;
+        }
+        return <span key={i}>{renderInlineMarkdown(line)}{i < lines.length - 1 ? '\n' : ''}</span>;
+      })}
+    </div>
+  );
+}
+
 /** Reducer: push one hl event into the running entry list. */
 export function applyHlEvent(entries: StreamEntry[], e: HlEventLike): StreamEntry[] {
   if (e.type === 'thinking' && e.text) {
@@ -46,7 +77,6 @@ export function applyHlEvent(entries: StreamEntry[], e: HlEventLike): StreamEntr
     return [...entries, entry].slice(-MAX_ENTRIES);
   }
   if (e.type === 'tool_result' && e.name) {
-    // Patch the last matching tool entry without a result.
     const out = entries.slice();
     for (let i = out.length - 1; i >= 0; i--) {
       const en = out[i];
@@ -88,16 +118,14 @@ export function AgentStream({ entries, iteration, maxIterations, onStop }: Agent
         )}
         {entries.map((en, i) => {
           if (en.kind === 'thinking') {
-            return <div key={i} className="pill-stream-entry pill-stream-entry--thinking">{en.text}</div>;
+            return <ThinkingBlock key={i} text={en.text} />;
           }
           const status = en.ok === undefined ? '⋯' : en.ok ? '✓' : '✗';
           return (
             <div key={i} className={`pill-stream-entry pill-stream-entry--tool ${en.ok === false ? 'is-error' : ''}`}>
-              <span className="pill-stream-tool-name">▶ {en.name}</span>
-              <span className="pill-stream-tool-args">({en.argsPreview})</span>
-              <div className="pill-stream-tool-result">
+              <div className="pill-stream-tool-row">
                 <span className="pill-stream-tool-status">{status}</span>
-                {en.resultPreview && <span className="pill-stream-tool-preview">{en.resultPreview}</span>}
+                <span className="pill-stream-tool-name">{en.name}</span>
                 {typeof en.ms === 'number' && <span className="pill-stream-tool-ms">{en.ms}ms</span>}
               </div>
             </div>

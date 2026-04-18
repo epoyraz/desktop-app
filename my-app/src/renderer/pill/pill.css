@@ -63,7 +63,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: #0a0a0d;
+  background: transparent;
   overflow: hidden;
   font-family: var(--font-ui, 'Geist', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
@@ -73,7 +73,6 @@ body {
 
 #pill-root {
   width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -747,10 +746,17 @@ body {
 .pill-stream-entry--thinking {
   color: var(--color-fg-secondary, #8a8f98);
   font-style: italic;
+  white-space: pre-wrap;
 }
 
 .pill-stream-entry--tool {
   color: var(--color-fg-primary, #f0f0f2);
+}
+
+.pill-stream-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .pill-stream-tool-name {
@@ -759,39 +765,14 @@ body {
   font-size: 12px;
 }
 
-.pill-stream-tool-args {
-  color: var(--color-fg-tertiary, #6e737d);
-  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pill-stream-tool-result {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: 14px;
-  color: var(--color-fg-secondary, #8a8f98);
-  font-size: 11px;
-}
-
 .pill-stream-tool-status {
   font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
   color: var(--color-accent-default, #c8f135);
+  flex-shrink: 0;
 }
 
 .pill-stream-entry.is-error .pill-stream-tool-status {
   color: var(--color-status-error, #f87171);
-}
-
-.pill-stream-tool-preview {
-  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
 }
 
 .pill-stream-tool-ms {
@@ -799,4 +780,23 @@ body {
   font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
   font-size: 10px;
   color: var(--color-fg-tertiary, #6e737d);
+}
+
+.pill-stream-md-li {
+  padding-left: 10px;
+  position: relative;
+}
+
+.pill-stream-md-li::before {
+  content: '\2022';
+  position: absolute;
+  left: 0;
+}
+
+.pill-stream-inline-code {
+  font-family: var(--font-mono, 'Berkeley Mono', ui-monospace, monospace);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
