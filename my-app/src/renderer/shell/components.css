@@ -123,8 +123,8 @@
   content: '';
   position: absolute;
   left: -1px;
-  top: 6px;
-  bottom: 6px;
+  top: 25%;
+  bottom: 25%;
   width: 1px;
   background: var(--color-border-default);
   opacity: 0.4;
@@ -138,7 +138,7 @@
 }
 
 .tab-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-fg-primary);
 }
 
@@ -149,7 +149,7 @@
    active state. */
 .tab-item--active,
 .tab-item--active:hover {
-  background: var(--color-tab-active);
+  background: var(--color-bg-elevated);
   color: var(--color-fg-primary);
   margin-bottom: -1px;
   padding-bottom: 1px;
