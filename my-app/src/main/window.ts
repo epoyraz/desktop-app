@@ -64,9 +64,14 @@ function saveBounds(win: BrowserWindow): void {
   }
 }
 
-export function createShellWindow(): BrowserWindow {
+export interface ShellWindowOptions {
+  titleSuffix?: string;
+}
+
+export function createShellWindow(opts?: ShellWindowOptions): BrowserWindow {
   const bounds = loadBounds();
-  mainLogger.info('window.createShellWindow', { bounds });
+  const titleSuffix = opts?.titleSuffix ?? '';
+  mainLogger.info('window.createShellWindow', { bounds, titleSuffix });
 
   const win = new BrowserWindow({
     x: bounds.x,
@@ -85,6 +90,10 @@ export function createShellWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+
+  if (titleSuffix) {
+    win.setTitle(win.getTitle() + titleSuffix);
+  }
 
   // Load the shell renderer
   if (

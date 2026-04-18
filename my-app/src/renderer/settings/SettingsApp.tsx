@@ -59,6 +59,18 @@ const TABS: Array<{ id: TabId; label: string }> = [
 const THEME_ONBOARDING = 'onboarding';
 const THEME_SHELL      = 'shell';
 
+const FONT_SIZE_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 9,  label: 'Very small' },
+  { value: 12, label: 'Small' },
+  { value: 16, label: 'Medium (default)' },
+  { value: 20, label: 'Large' },
+  { value: 24, label: 'Very large' },
+];
+
+const PAGE_ZOOM_OPTIONS = [
+  75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
+] as const;
+
 // ---------------------------------------------------------------------------
 // Types (mirror preload shape)
 // ---------------------------------------------------------------------------
@@ -383,14 +395,21 @@ function AgentTab(): React.ReactElement {
 
 function AppearanceTab(): React.ReactElement {
   const toast = useToast();
-  const [theme, setTheme]   = useState(THEME_ONBOARDING);
-  const [saving, setSaving] = useState(false);
+  const [theme, setTheme]       = useState(THEME_ONBOARDING);
+  const [fontSize, setFontSize] = useState(16);
+  const [pageZoom, setPageZoom] = useState(100);
+  const [saving, setSaving]     = useState(false);
 
   useEffect(() => {
     void window.settingsAPI.getTheme().then((t) => setTheme(t));
+    void window.settingsAPI.getFontSize().then((s) => setFontSize(s));
+    void window.settingsAPI.getDefaultPageZoom().then((level) => {
+      const percent = Math.round(Math.pow(1.2, level) * 100);
+      setPageZoom(percent);
+    });
   }, []);
 
-  async function handleChange(next: string): Promise<void> {
+  async function handleThemeChange(next: string): Promise<void> {
     setTheme(next);
     setSaving(true);
     try {
@@ -407,11 +426,39 @@ function AppearanceTab(): React.ReactElement {
     }
   }
 
+  async function handleFontSizeChange(size: number): Promise<void> {
+    setFontSize(size);
+    try {
+      await window.settingsAPI.setFontSize(size);
+      toast.show({ variant: 'success', title: `Font size set to ${FONT_SIZE_OPTIONS.find((o) => o.value === size)?.label ?? size}` });
+    } catch (err) {
+      toast.show({
+        variant: 'error',
+        title: 'Font size save failed',
+        message: (err as Error).message,
+      });
+    }
+  }
+
+  async function handlePageZoomChange(percent: number): Promise<void> {
+    setPageZoom(percent);
+    try {
+      await window.settingsAPI.setDefaultPageZoom(percent);
+      toast.show({ variant: 'success', title: `Default page zoom set to ${percent}%` });
+    } catch (err) {
+      toast.show({
+        variant: 'error',
+        title: 'Page zoom save failed',
+        message: (err as Error).message,
+      });
+    }
+  }
+
   return (
     <div className="settings-section">
       <h2 className="settings-section-title">Appearance</h2>
       <p className="settings-section-desc">
-        Choose the visual theme for the application.
+        Customize the visual theme, font size, and page zoom.
       </p>
 
       <Card variant="default" padding="md" className="settings-card">
@@ -424,7 +471,7 @@ function AppearanceTab(): React.ReactElement {
               name="theme"
               value={THEME_ONBOARDING}
               checked={theme === THEME_ONBOARDING}
-              onChange={() => void handleChange(THEME_ONBOARDING)}
+              onChange={() => void handleThemeChange(THEME_ONBOARDING)}
             />
             <span className="settings-radio-content">
               <span className="settings-radio-label">Warm</span>
@@ -443,7 +490,7 @@ function AppearanceTab(): React.ReactElement {
               name="theme"
               value={THEME_SHELL}
               checked={theme === THEME_SHELL}
-              onChange={() => void handleChange(THEME_SHELL)}
+              onChange={() => void handleThemeChange(THEME_SHELL)}
             />
             <span className="settings-radio-content">
               <span className="settings-radio-label">Crisp</span>
@@ -456,6 +503,40 @@ function AppearanceTab(): React.ReactElement {
             </span>
           </label>
         </fieldset>
+      </Card>
+
+      <Card variant="default" padding="md" className="settings-card">
+        <div className="settings-field">
+          <label className="settings-label" htmlFor="font-size-select">Font size</label>
+          <p className="settings-field-hint">Affects text size on web pages without changing layout.</p>
+          <select
+            id="font-size-select"
+            className="settings-select"
+            value={fontSize}
+            onChange={(e) => void handleFontSizeChange(Number(e.target.value))}
+          >
+            {FONT_SIZE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </Card>
+
+      <Card variant="default" padding="md" className="settings-card">
+        <div className="settings-field">
+          <label className="settings-label" htmlFor="page-zoom-select">Page zoom</label>
+          <p className="settings-field-hint">Sets the default zoom level for all pages. Per-site overrides take priority.</p>
+          <select
+            id="page-zoom-select"
+            className="settings-select"
+            value={pageZoom}
+            onChange={(e) => void handlePageZoomChange(Number(e.target.value))}
+          >
+            {PAGE_ZOOM_OPTIONS.map((p) => (
+              <option key={p} value={p}>{p}%{p === 100 ? ' (default)' : ''}</option>
+            ))}
+          </select>
+        </div>
       </Card>
     </div>
   );

@@ -24,6 +24,7 @@ import { mainLogger } from '../logger';
 import { HistoryStore } from '../history/HistoryStore';
 import { attachContextMenu } from '../contextMenu/ContextMenuController';
 import { getFormDetectorScript, FORM_DETECTOR_PREFIX } from '../passwords/formDetector';
+import { readPrefs } from '../settings/ipc';
 
 // Chrome's chrome://newtab is a local page — zero network, instant paint.
 // We mirror that with a dark-themed data: URL so a new tab opens instantly
@@ -86,6 +87,10 @@ export interface FindResultPayload {
 // Forge VitePlugin globals for internal pages (injected at build time)
 declare const HISTORY_VITE_DEV_SERVER_URL: string | undefined;
 declare const HISTORY_VITE_NAME: string | undefined;
+declare const DOWNLOADS_VITE_DEV_SERVER_URL: string | undefined;
+declare const DOWNLOADS_VITE_NAME: string | undefined;
+
+const CHROME_URL_RE = /^chrome:\/\/([a-z-]+)\/?$/i;
 
 // URLs that should not be recorded in browsing history
 const SKIP_HISTORY_RE = /^(data:|about:|chrome:|devtools:|view-source:)/i;
@@ -121,18 +126,19 @@ export class TabManager {
   private urlMatchFn: UrlMatchFn | null = null;
   private historyStore: HistoryStore | null = null;
   readonly isGuest: boolean;
-  private readonly guestPartition: string | null;
+  private readonly partition: string | null;
 
-  constructor(win: BrowserWindow, opts?: { guest?: boolean; guestPartition?: string }) {
+  constructor(win: BrowserWindow, opts?: { dataDir?: string; partition?: string; guest?: boolean }) {
     this.win = win;
     this.isGuest = opts?.guest ?? false;
-    this.guestPartition = opts?.guestPartition ?? null;
-    this.sessionStore = new SessionStore();
-    this.zoomStore = new ZoomStore();
+    this.partition = opts?.partition ?? null;
+    this.sessionStore = new SessionStore(opts?.dataDir);
+    this.zoomStore = new ZoomStore(opts?.dataDir);
     this.registerIpcHandlers();
     mainLogger.info('TabManager.init', {
       isGuest: this.isGuest,
-      guestPartition: this.guestPartition,
+      partition: this.partition,
+      dataDir: opts?.dataDir ?? '(default)',
     });
   }
 
@@ -298,8 +304,8 @@ export class TabManager {
       nodeIntegration: false,
       sandbox: true,
     };
-    if (this.guestPartition) {
-      webPrefs.partition = this.guestPartition;
+    if (this.partition) {
+      webPrefs.partition = this.partition;
     }
     const view = new WebContentsView({ webPreferences: webPrefs });
 
@@ -568,6 +574,13 @@ export class TabManager {
 
   navigate(tabId: string, input: string): void {
     const url = parseNavigationInput(input, this.urlMatchFn ?? undefined);
+    const chromeMatch = CHROME_URL_RE.exec(url);
+    if (chromeMatch) {
+      const page = chromeMatch[1].toLowerCase();
+      mainLogger.info('TabManager.navigate.chromeUrl', { tabId, page });
+      this.openInternalPage(page);
+      return;
+    }
     const nav = this.navControllers.get(tabId);
     if (nav) {
       nav.navigate(url);
@@ -582,7 +595,15 @@ export class TabManager {
 
   openInternalPage(page: string): void {
     mainLogger.info('TabManager.openInternalPage', { page });
-    const preloadPath = path.join(__dirname, 'history.js');
+
+    const preloadMap: Record<string, string> = {
+      history: 'history.js',
+      downloads: 'downloads.js',
+    };
+    const preloadFile = preloadMap[page] ?? 'history.js';
+    const preloadPath = path.join(__dirname, preloadFile);
+    mainLogger.debug('TabManager.openInternalPage.preload', { page, preloadFile, preloadPath });
+
     const view = new WebContentsView({
       webPreferences: {
         preload: preloadPath,
@@ -603,12 +624,25 @@ export class TabManager {
     this.positionView(view);
 
     let url: string;
-    if (typeof HISTORY_VITE_DEV_SERVER_URL !== 'undefined' && HISTORY_VITE_DEV_SERVER_URL) {
-      url = HISTORY_VITE_DEV_SERVER_URL + '/src/renderer/history/history.html';
+    if (page === 'history') {
+      if (typeof HISTORY_VITE_DEV_SERVER_URL !== 'undefined' && HISTORY_VITE_DEV_SERVER_URL) {
+        url = HISTORY_VITE_DEV_SERVER_URL + '/src/renderer/history/history.html';
+      } else {
+        const name = typeof HISTORY_VITE_NAME !== 'undefined' ? HISTORY_VITE_NAME : 'history';
+        url = 'file://' + path.join(__dirname, '..', '..', 'renderer', name, 'history.html');
+      }
+    } else if (page === 'downloads') {
+      if (typeof DOWNLOADS_VITE_DEV_SERVER_URL !== 'undefined' && DOWNLOADS_VITE_DEV_SERVER_URL) {
+        url = DOWNLOADS_VITE_DEV_SERVER_URL + '/src/renderer/downloads/downloads.html';
+      } else {
+        const name = typeof DOWNLOADS_VITE_NAME !== 'undefined' ? DOWNLOADS_VITE_NAME : 'downloads';
+        url = 'file://' + path.join(__dirname, '..', '..', 'renderer', name, 'downloads.html');
+      }
     } else {
-      const name = typeof HISTORY_VITE_NAME !== 'undefined' ? HISTORY_VITE_NAME : 'history';
-      url = 'file://' + path.join(__dirname, '..', '..', 'renderer', name, 'history.html');
+      mainLogger.warn('TabManager.openInternalPage.unknownPage', { page });
+      return;
     }
+
     mainLogger.debug('TabManager.openInternalPage.loadURL', { page, url });
     view.webContents.loadURL(url);
 
@@ -852,6 +886,20 @@ export class TabManager {
     this.createTab(url);
   }
 
+  getActiveTabPrintInfo(): { webContentsId: number; title: string; url: string } | null {
+    if (!this.activeTabId) return null;
+    const view = this.tabs.get(this.activeTabId);
+    if (!view) return null;
+    const wc = view.webContents;
+    const info = {
+      webContentsId: wc.id,
+      title: wc.getTitle() || 'Untitled',
+      url: wc.getURL() || '',
+    };
+    mainLogger.info('TabManager.getActiveTabPrintInfo', info);
+    return info;
+  }
+
   printActive(): void {
     if (!this.activeTabId) return;
     const view = this.tabs.get(this.activeTabId);
@@ -933,11 +981,30 @@ export class TabManager {
 
   private applyPersistedZoom(wc: Electron.WebContents): void {
     const url = wc.getURL();
-    const level = this.zoomStore.getZoomForUrl(url);
-    if (level !== 0) {
-      wc.setZoomLevel(level);
-      mainLogger.debug('TabManager.applyPersistedZoom', { url, level, percent: zoomLevelToPercent(level) });
+    const perSiteLevel = this.zoomStore.getZoomForUrl(url);
+    if (perSiteLevel !== 0) {
+      wc.setZoomLevel(perSiteLevel);
+      mainLogger.debug('TabManager.applyPersistedZoom.perSite', { url, level: perSiteLevel, percent: zoomLevelToPercent(perSiteLevel) });
+      return;
     }
+    const prefs = readPrefs();
+    const defaultZoom = typeof prefs.defaultPageZoom === 'number' ? prefs.defaultPageZoom : 0;
+    if (defaultZoom !== 0) {
+      wc.setZoomLevel(defaultZoom);
+      mainLogger.debug('TabManager.applyPersistedZoom.default', { url, level: defaultZoom, percent: zoomLevelToPercent(defaultZoom) });
+    }
+  }
+
+  private applyFontSize(wc: Electron.WebContents): void {
+    const prefs = readPrefs();
+    const size = typeof prefs.fontSize === 'number' ? prefs.fontSize : 16;
+    if (size === 16) return;
+    const css = `html { font-size: ${size}px; }`;
+    wc.insertCSS(css).then((key) => {
+      mainLogger.debug('TabManager.applyFontSize', { size, cssKey: key });
+    }).catch((err) => {
+      mainLogger.warn('TabManager.applyFontSize.failed', { size, error: (err as Error).message });
+    });
   }
 
   private broadcastZoom(): void {
@@ -1167,6 +1234,7 @@ export class TabManager {
 
     wc.on('did-finish-load', () => {
       mainLogger.debug('TabManager.tab.didFinishLoad', { tabId });
+      this.applyFontSize(wc);
       this.sendTabUpdate(tabId);
 
       // Inject password form detector into every page load (skip data: and about: pages)

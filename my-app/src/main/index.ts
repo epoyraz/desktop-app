@@ -51,6 +51,7 @@ import { registerPasswordHandlers, unregisterPasswordHandlers } from './password
 import { ProfileStore } from './profiles/ProfileStore';
 import { registerProfileHandlers, unregisterProfileHandlers } from './profiles/ipc';
 import { createProfilePickerWindow, closeProfilePickerWindow } from './profiles/ProfilePickerWindow';
+import { getProfileDataDir, getProfilePartitionName } from './profiles/ProfileContext';
 // Permissions framework
 import { PermissionStore } from './permissions/PermissionStore';
 import { PermissionManager } from './permissions/PermissionManager';
@@ -64,7 +65,11 @@ import { HistoryStore } from './history/HistoryStore';
 import { registerHistoryHandlers, unregisterHistoryHandlers } from './history/ipc';
 // Issue #36 — Downloads
 import { DownloadManager } from './downloads/DownloadManager';
+// Issue #26 — Chrome internal pages
+import { registerChromeHandlers, unregisterChromeHandlers } from './chrome/ipc';
 // Downloads
+// Issue #97 — Print Preview
+import { openPrintPreviewWindow } from './print/PrintPreviewWindow';
 
 // ---------------------------------------------------------------------------
 // Crash telemetry: catch unhandled errors before anything else
@@ -131,6 +136,9 @@ let permissionManager: PermissionManager | null = null;
 let extensionManager: ExtensionManager | null = null;
 let historyStore: HistoryStore | null = null;
 let downloadManager: DownloadManager | null = null;
+let activeProfileId: string = 'default';
+let isGuestSession = false;
+let guestPartitionName: string | null = null;
 
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({ clientId: process.env.GOOGLE_CLIENT_ID ?? 'PLACEHOLDER_CLIENT_ID' });
@@ -139,10 +147,14 @@ const keychainStore = new KeychainStore();
 // ---------------------------------------------------------------------------
 // Helper: open shell window and wire it up (used by both paths)
 // ---------------------------------------------------------------------------
-function openShellAndWire(): BrowserWindow {
+function openShellAndWire(profileId?: string): BrowserWindow {
   mainLogger.info('main.openShellAndWire', { msg: 'Creating shell window' });
+  const pid = profileId ?? activeProfileId;
+  const profileDataDir = getProfileDataDir(pid);
+  const profilePartition = getProfilePartitionName(pid);
+  mainLogger.info('main.openShellAndWire.profile', { profileId: pid, dataDir: profileDataDir, partition: profilePartition });
   shellWindow = createShellWindow();
-  tabManager = new TabManager(shellWindow);
+  tabManager = new TabManager(shellWindow, { dataDir: profileDataDir, partition: profilePartition });
   downloadManager?.destroy();
   downloadManager = new DownloadManager(shellWindow);
 
@@ -245,14 +257,88 @@ function openShellAndWire(): BrowserWindow {
 }
 
 // ---------------------------------------------------------------------------
+// Guest mode: ephemeral session, no data persistence
+// ---------------------------------------------------------------------------
+function openGuestShell(): BrowserWindow {
+  mainLogger.info('main.openGuestShell', { msg: 'Creating guest shell window' });
+  isGuestSession = true;
+  guestPartitionName = createGuestPartitionName();
+  mainLogger.info('main.openGuestShell.partition', { guestPartitionName });
+
+  shellWindow = createShellWindow({ titleSuffix: ' (Guest)' });
+  tabManager = new TabManager(shellWindow, {
+    guest: true,
+    partition: guestPartitionName,
+  });
+  downloadManager?.destroy();
+  downloadManager = new DownloadManager(shellWindow);
+
+  tabManager.restoreSession();
+
+  tabManager.setOnClosedTabsChanged(() => {
+    rebuildApplicationMenu();
+  });
+
+  setTimeout(async () => {
+    if (tabManager) {
+      const port = await tabManager.discoverCdpPort();
+      mainLogger.info('main.cdpPort.guest', { port });
+    }
+  }, 2000);
+
+  createPillWindow();
+  const hotkeyOk = registerHotkeys(() => togglePill());
+  if (!hotkeyOk) {
+    mainLogger.warn('main.hotkey.guest', { msg: 'Cmd+K hotkey registration failed' });
+  }
+  tabManager.setPillToggle(() => togglePill());
+
+  shellWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key !== 'k' && input.key !== 'K') return;
+    const cmdOrCtrl = process.platform === 'darwin' ? input.meta : input.control;
+    if (!cmdOrCtrl) return;
+    if (input.shift || input.alt) return;
+    if (process.platform === 'darwin' && input.control) return;
+    event.preventDefault();
+    mainLogger.debug('main.guestShellBeforeInput.cmdK');
+    togglePill();
+  });
+
+  rebuildApplicationMenu();
+
+  shellWindow.webContents.once('did-finish-load', () => {
+    mainLogger.info('main.guestShellReady', { windowId: shellWindow?.id });
+    shellWindow?.webContents.send('window-ready');
+    shellWindow?.webContents.send('guest-mode', true);
+  });
+
+  shellWindow.on('resize', () => tabManager?.relayout());
+
+  shellWindow.on('closed', () => {
+    mainLogger.info('main.guestShell.closed', {
+      msg: 'Guest window closed — clearing ephemeral session data',
+      guestPartitionName,
+    });
+    if (guestPartitionName) {
+      void clearGuestSession(guestPartitionName);
+    }
+    isGuestSession = false;
+    guestPartitionName = null;
+  });
+
+  return shellWindow;
+}
+
+// ---------------------------------------------------------------------------
 // App ready
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
   mainLogger.info('main.appReady');
 
   // Wave1 P3 — Bookmarks: init store + register IPC before the shell loads.
-  bookmarkStore = new BookmarkStore();
-  permissionStore = new PermissionStore();
+  bookmarkStore = new BookmarkStore(getProfileDataDir(activeProfileId));
+  permissionStore = new PermissionStore(getProfileDataDir(activeProfileId));
   registerBookmarkHandlers({
     store: bookmarkStore,
     getShellWindow: () => shellWindow,
@@ -261,22 +347,35 @@ app.whenReady().then(async () => {
   });
 
   // Password Manager: init store + register IPC
-  passwordStore = new PasswordStore();
+  passwordStore = new PasswordStore(getProfileDataDir(activeProfileId));
   registerPasswordHandlers({ store: passwordStore });
 
   // Issue #45 — Profile picker: init store + register IPC
   profileStore = new ProfileStore();
   registerProfileHandlers({
+    activeProfileId,
     profileStore,
     onProfileSelected: (profileId) => {
       mainLogger.info("main.profileSelected", { profileId });
-      openShellAndWire();
+      if (profileId === null) {
+        openGuestShell();
+      } else {
+        activeProfileId = profileId ?? 'default';
+        openShellAndWire();
+      }
     },
   });
 
   // Issue #40 — History: init store + register IPC
-  historyStore = new HistoryStore();
+  historyStore = new HistoryStore(getProfileDataDir(activeProfileId));
   registerHistoryHandlers({ store: historyStore });
+
+  // Issue #26 — Chrome internal pages
+  registerChromeHandlers(
+    (page: string) => tabManager?.openInternalPage(page),
+    () => openSettingsWindow(),
+    () => openExtensionsWindow(),
+  );
 
   // pill:submit — spawns a Docker container with the agent loop.
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
@@ -333,6 +432,35 @@ app.whenReady().then(async () => {
     const BASE = 76;
     const offset = Math.max(0, height - BASE);
     tabManager?.setChromeOffset(offset);
+  });
+
+  // Issue #83 — Side panel: renderer reports side panel width so TabManager
+  // can shrink the WebContentsView to make room.
+  ipcMain.handle('shell:set-side-panel-width', (_e, width: unknown) => {
+    if (typeof width !== 'number' || !Number.isFinite(width)) return;
+    mainLogger.debug('main.shell:set-side-panel-width', { width });
+    tabManager?.setSidePanelWidth(width);
+  });
+
+  ipcMain.handle('shell:set-side-panel-position', (_e, position: unknown) => {
+    if (position !== 'left' && position !== 'right') return;
+    mainLogger.debug('main.shell:set-side-panel-position', { position });
+    tabManager?.setSidePanelPosition(position);
+  });
+
+  ipcMain.handle('shell:get-history', async () => {
+    if (!historyStore) return [];
+    try {
+      const result = historyStore.query({ limit: 200 });
+      return result.entries.map((e: { url: string; title: string; visitTime: number }) => ({
+        url: e.url,
+        title: e.title,
+        visitedAt: e.visitTime,
+      }));
+    } catch (err) {
+      mainLogger.warn('main.shell:get-history.failed', { error: (err as Error).message });
+      return [];
+    }
   });
 
   // pill:set-expanded — renderer asks the main process to grow/shrink the pill
@@ -407,6 +535,7 @@ app.whenReady().then(async () => {
   } else {
     // Returning user — check if profile picker should be shown
     const showProfilePicker = profileStore?.getShowPickerOnLaunch() ?? false;
+    activeProfileId = profileStore?.getLastSelectedProfileId() ?? 'default';
     mainLogger.info('main.onboardingGate.returning', {
       msg: 'Returning user',
       showProfilePicker,
@@ -424,12 +553,14 @@ app.whenReady().then(async () => {
 
   // Flush session + bookmarks on quit
   app.on('before-quit', async () => {
-    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + hl teardown' });
-    tabManager?.flushSession();
-    tabManager?.flushZoom();
-    bookmarkStore?.flushSync();
-    historyStore?.flushSync();
-    permissionStore?.flushSync();
+    mainLogger.info('main.beforeQuit', { msg: 'Flushing session + hl teardown', isGuest: isGuestSession });
+    if (!isGuestSession) {
+      tabManager?.flushSession();
+      tabManager?.flushZoom();
+      bookmarkStore?.flushSync();
+      historyStore?.flushSync();
+      permissionStore?.flushSync();
+    }
     await teardownHl();
   });
 
@@ -443,6 +574,7 @@ app.whenReady().then(async () => {
     ipcMain.removeHandler('settings:clear-all-zoom-overrides');
     unregisterBookmarkHandlers();
     unregisterHistoryHandlers();
+    unregisterChromeHandlers();
     unregisterProfileHandlers();
     unregisterPermissionHandlers();
     unregisterExtensionsHandlers();
@@ -671,6 +803,17 @@ function buildMenuTemplate(): MenuItemConstructorOptions[] {
           accelerator: 'CommandOrControl+P',
           click: () => {
             mainLogger.debug('shortcuts.print');
+            const info = tabManager?.getActiveTabPrintInfo();
+            if (info && shellWindow) {
+              openPrintPreviewWindow(info.webContentsId, info.title, info.url, shellWindow);
+            }
+          },
+        },
+        {
+          label: 'Page Setup…',
+          accelerator: 'CommandOrControl+Alt+P',
+          click: () => {
+            mainLogger.debug('shortcuts.pageSetup');
             tabManager?.printActive();
           },
         },
@@ -1085,7 +1228,7 @@ function buildMenuTemplate(): MenuItemConstructorOptions[] {
           accelerator: 'CommandOrControl+Shift+J',
           click: () => {
             mainLogger.debug('shortcuts.downloads');
-            shellWindow?.webContents.send('toggle-downloads');
+            tabManager?.openInternalPage('downloads');
           },
         },
         {
@@ -1148,6 +1291,140 @@ function switchTabRelative(delta: number): void {
 // ---------------------------------------------------------------------------
 // IPC: window-level handlers
 // ---------------------------------------------------------------------------
+ipcMain.handle('shell:get-platform', () => process.platform);
+
+// Issue #81 — Three-dot app menu for non-macOS platforms.
+ipcMain.handle('menu:show-app-menu', (_event, bounds: { x: number; y: number }) => {
+  if (!shellWindow || !tabManager) {
+    mainLogger.warn('menu:show-app-menu', { msg: 'shellWindow or tabManager not ready' });
+    return;
+  }
+  mainLogger.info('menu:show-app-menu', { msg: 'Building three-dot app menu', bounds });
+
+  const zoomPercent = tabManager.getZoomPercentActive?.() ?? 100;
+
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: 'New Tab',
+      accelerator: 'Ctrl+T',
+      click: () => { tabManager?.createTab(); },
+    },
+    { label: 'New Window', accelerator: 'Ctrl+N', enabled: false },
+    { label: 'New Incognito Window', accelerator: 'Ctrl+Shift+N', enabled: false },
+    { type: 'separator' },
+    {
+      label: 'History',
+      submenu: [
+        {
+          label: 'Show Full History', accelerator: 'Ctrl+Y',
+          click: () => { tabManager?.openInternalPage('history'); },
+        },
+        { type: 'separator' },
+        {
+          label: 'Reopen Closed Tab', accelerator: 'Ctrl+Shift+T',
+          click: () => { tabManager?.reopenLastClosed(); },
+        },
+        { label: 'Recently Closed', submenu: buildRecentlyClosedSubmenu() },
+        { type: 'separator' },
+        {
+          label: 'Clear Browsing Data…', accelerator: 'Ctrl+Shift+Delete',
+          click: () => { openClearDataDialogFromMenu(); },
+        },
+      ],
+    },
+    {
+      label: 'Downloads', accelerator: 'Ctrl+J',
+      click: () => { shellWindow?.webContents.send('toggle-downloads'); },
+    },
+    {
+      label: 'Bookmarks',
+      submenu: [
+        {
+          label: 'Bookmark This Tab…', accelerator: 'Ctrl+D',
+          click: () => { shellWindow?.webContents.send('open-bookmark-dialog'); },
+        },
+        {
+          label: 'Show Bookmarks Bar', accelerator: 'Ctrl+Shift+B',
+          click: () => { shellWindow?.webContents.send('toggle-bookmarks-bar'); },
+        },
+      ],
+    },
+    {
+      label: 'Extensions',
+      click: () => { openExtensionsWindow(); },
+    },
+    { type: 'separator' },
+    {
+      label: `Zoom (${zoomPercent}%)`,
+      submenu: [
+        { label: 'Zoom In', accelerator: 'Ctrl+=', click: () => { tabManager?.zoomInActive(); } },
+        { label: 'Zoom Out', accelerator: 'Ctrl+-', click: () => { tabManager?.zoomOutActive(); } },
+        { label: 'Actual Size', accelerator: 'Ctrl+0', click: () => { tabManager?.zoomResetActive(); } },
+        { type: 'separator' },
+        {
+          label: 'Full Screen', accelerator: 'F11',
+          click: () => { shellWindow?.setFullScreen(!shellWindow?.isFullScreen()); },
+        },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: 'Print…', accelerator: 'Ctrl+P',
+      click: () => {
+        const info = tabManager?.getActiveTabPrintInfo();
+        if (info && shellWindow) {
+          openPrintPreviewWindow(info.webContentsId, info.title, info.url, shellWindow);
+        }
+      },
+    },
+    {
+      label: 'Find…', accelerator: 'Ctrl+F',
+      click: () => {
+        const lastQuery = tabManager?.getActiveTabLastFindQuery() ?? '';
+        shellWindow?.webContents.send('find-open', { lastQuery });
+      },
+    },
+    {
+      label: 'More Tools',
+      submenu: [
+        { label: 'View Source', accelerator: 'Ctrl+U', click: () => { tabManager?.openViewSourceForActive(); } },
+        { label: 'Developer Tools', accelerator: 'Ctrl+Shift+I', click: () => { tabManager?.toggleDevToolsForActive(); } },
+        { label: 'JavaScript Console', accelerator: 'Ctrl+Shift+J', click: () => { tabManager?.openDevToolsConsoleForActive(); } },
+        { type: 'separator' },
+        { label: 'Task Manager', enabled: false },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' },
+        { type: 'separator' }, { role: 'selectAll' },
+        { type: 'separator' }, { role: 'undo' }, { role: 'redo' },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: 'Settings', accelerator: 'Ctrl+,',
+      click: () => { openSettingsWindow(); },
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Report an Issue…', click: () => { shell.openExternal('https://github.com/anthropics/desktop-app/issues'); } },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: 'Exit', accelerator: 'Ctrl+Shift+Q',
+      click: () => { app.quit(); },
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup({ window: shellWindow, x: Math.round(bounds.x), y: Math.round(bounds.y) });
+});
+
 ipcMain.handle('shell:get-cdp-info', async () => {
   if (!tabManager) return null;
   const cdpUrl = await tabManager.getActiveTabCdpUrl();

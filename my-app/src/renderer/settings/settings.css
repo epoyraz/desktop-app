@@ -664,3 +664,46 @@
   transform: translateX(18px);
   background-color: var(--color-fg-inverse);
 }
+
+/* ---------------------------------------------------------------------------
+   Select dropdown (font size, page zoom)
+--------------------------------------------------------------------------- */
+
+.settings-select {
+  height: 38px;
+  padding-inline: 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-primary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-ui);
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow   var(--duration-normal) var(--ease-out);
+}
+
+.settings-select:focus {
+  border-color: var(--color-accent-default);
+  box-shadow: var(--glow-accent);
+  outline: none;
+}
+
+.settings-select option {
+  background-color: var(--color-bg-elevated);
+  color: var(--color-fg-primary);
+}
+
+.settings-field-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-tertiary);
+  line-height: var(--line-height-relaxed);
+  margin-top: -2px;
+}
