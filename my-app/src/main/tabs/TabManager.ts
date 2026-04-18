@@ -21,6 +21,7 @@ import { ZoomStore, extractOrigin, zoomLevelToPercent, type ZoomEntry } from './
 import { parseNavigationInput, UrlMatchFn } from '../navigation';
 import { mainLogger } from '../logger';
 import { attachContextMenu } from '../contextMenu/ContextMenuController';
+import { getFormDetectorScript, FORM_DETECTOR_PREFIX } from '../passwords/formDetector';
 
 // Chrome's chrome://newtab is a local page — zero network, instant paint.
 // We mirror that with a dark-themed data: URL so a new tab opens instantly
@@ -47,6 +48,7 @@ export interface TabState {
   isLoading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  zoomLevel: number;
 }
 
 export interface TabManagerState {
@@ -409,6 +411,7 @@ export class TabManager {
     mainLogger.info('TabManager.activateTab.ok', { tabId });
     this.win.webContents.send('tab-activated', tabId);
     this.broadcastState();
+    this.broadcastZoom();
   }
 
   moveTab(tabId: string, toIndex: number): void {
@@ -667,6 +670,7 @@ export class TabManager {
   // ---------------------------------------------------------------------------
   // Electron zoom-level steps of 0.5 correspond roughly to Chrome's 10% stops
   // (factor = 1.2^level). Clamp to [-3, 5] to match Chrome's 25%–500% range.
+  // Zoom levels persist per-origin via ZoomStore so they survive restarts.
   private adjustActiveZoom(delta: number): void {
     if (!this.activeTabId) return;
     const view = this.tabs.get(this.activeTabId);
@@ -674,7 +678,9 @@ export class TabManager {
     const current = view.webContents.getZoomLevel();
     const next = Math.max(-3, Math.min(5, current + delta));
     view.webContents.setZoomLevel(next);
-    mainLogger.debug('TabManager.zoom', { tabId: this.activeTabId, level: next });
+    this.zoomStore.setZoomForUrl(view.webContents.getURL(), next);
+    mainLogger.debug('TabManager.zoom', { tabId: this.activeTabId, level: next, percent: zoomLevelToPercent(next) });
+    this.broadcastZoom();
   }
 
   zoomInActive():   void { this.adjustActiveZoom(0.5); }
@@ -684,7 +690,62 @@ export class TabManager {
     const view = this.tabs.get(this.activeTabId);
     if (!view) return;
     view.webContents.setZoomLevel(0);
+    this.zoomStore.setZoomForUrl(view.webContents.getURL(), 0);
     mainLogger.debug('TabManager.zoom.reset', { tabId: this.activeTabId });
+    this.broadcastZoom();
+  }
+
+  getActiveZoomPercent(): number {
+    if (!this.activeTabId) return 100;
+    const view = this.tabs.get(this.activeTabId);
+    if (!view) return 100;
+    return zoomLevelToPercent(view.webContents.getZoomLevel());
+  }
+
+  getZoomOverrides(): ZoomEntry[] {
+    return this.zoomStore.listOverrides();
+  }
+
+  removeZoomOverride(origin: string): boolean {
+    const removed = this.zoomStore.removeOrigin(origin);
+    if (removed) {
+      mainLogger.info('TabManager.removeZoomOverride', { origin });
+      for (const [, view] of this.tabs) {
+        const tabOrigin = extractOrigin(view.webContents.getURL());
+        if (tabOrigin === origin) {
+          view.webContents.setZoomLevel(0);
+        }
+      }
+      this.broadcastZoom();
+    }
+    return removed;
+  }
+
+  clearAllZoomOverrides(): void {
+    this.zoomStore.clearAll();
+    for (const [, view] of this.tabs) {
+      view.webContents.setZoomLevel(0);
+    }
+    mainLogger.info('TabManager.clearAllZoomOverrides');
+    this.broadcastZoom();
+  }
+
+  flushZoom(): void {
+    this.zoomStore.flushSync();
+  }
+
+  private applyPersistedZoom(wc: Electron.WebContents): void {
+    const url = wc.getURL();
+    const level = this.zoomStore.getZoomForUrl(url);
+    if (level !== 0) {
+      wc.setZoomLevel(level);
+      mainLogger.debug('TabManager.applyPersistedZoom', { url, level, percent: zoomLevelToPercent(level) });
+    }
+  }
+
+  private broadcastZoom(): void {
+    const percent = this.getActiveZoomPercent();
+    this.safeSend('zoom-changed', { percent });
   }
 
   // ---------------------------------------------------------------------------
@@ -854,7 +915,9 @@ export class TabManager {
       const delta = zoomDirection === 'in' ? 0.5 : -0.5;
       const next = Math.max(-3, Math.min(5, current + delta));
       wc.setZoomLevel(next);
+      this.zoomStore.setZoomForUrl(wc.getURL(), next);
       mainLogger.debug('TabManager.tab.zoomChanged', { tabId, direction: zoomDirection, level: next });
+      if (tabId === this.activeTabId) this.broadcastZoom();
     });
 
     wc.on('page-title-updated', (_e, title) => {
@@ -883,8 +946,10 @@ export class TabManager {
 
     wc.on('did-navigate', (_e, url) => {
       mainLogger.info('TabManager.tab.navigate', { tabId, url });
+      this.applyPersistedZoom(wc);
       this.sendTabUpdate(tabId);
       this.saveSession();
+      if (tabId === this.activeTabId) this.broadcastZoom();
     });
 
     wc.on('did-navigate-in-page', (_e, url) => {
@@ -896,6 +961,42 @@ export class TabManager {
     wc.on('did-finish-load', () => {
       mainLogger.debug('TabManager.tab.didFinishLoad', { tabId });
       this.sendTabUpdate(tabId);
+
+      // Inject password form detector into every page load (skip data: and about: pages)
+      const pageUrl = wc.getURL();
+      if (pageUrl && !pageUrl.startsWith('data:') && !pageUrl.startsWith('about:')) {
+        wc.executeJavaScript(getFormDetectorScript(), true).catch((err) => {
+          mainLogger.debug('TabManager.tab.formDetector.injectFailed', {
+            tabId,
+            error: (err as Error).message,
+          });
+        });
+      }
+    });
+
+    // Listen for password form submissions via console-message prefix
+    wc.on('console-message', (_e, _level, message) => {
+      if (!message.startsWith(FORM_DETECTOR_PREFIX)) return;
+      try {
+        const json = message.slice(FORM_DETECTOR_PREFIX.length);
+        const creds = JSON.parse(json) as { origin: string; username: string; password: string };
+        mainLogger.info('TabManager.tab.passwordDetected', {
+          tabId,
+          origin: creds.origin,
+          usernameLength: creds.username.length,
+        });
+        this.safeSend('password-form-detected', {
+          tabId,
+          origin: creds.origin,
+          username: creds.username,
+          password: creds.password,
+        });
+      } catch (err) {
+        mainLogger.warn('TabManager.tab.passwordDetected.parseFailed', {
+          tabId,
+          error: (err as Error).message,
+        });
+      }
     });
 
     wc.on('new-window' as any, (e: Event, url: string) => {
@@ -1200,6 +1301,35 @@ export class TabManager {
       this.showTabContextMenu(tabId);
     });
 
+    // Zoom IPC
+    ipcMain.handle('zoom:get-percent', () => {
+      return this.getActiveZoomPercent();
+    });
+
+    ipcMain.handle('zoom:in', () => {
+      this.zoomInActive();
+    });
+
+    ipcMain.handle('zoom:out', () => {
+      this.zoomOutActive();
+    });
+
+    ipcMain.handle('zoom:reset', () => {
+      this.zoomResetActive();
+    });
+
+    ipcMain.handle('zoom:list-overrides', () => {
+      return this.getZoomOverrides();
+    });
+
+    ipcMain.handle('zoom:remove-override', (_e, origin: string) => {
+      return this.removeZoomOverride(origin);
+    });
+
+    ipcMain.handle('zoom:clear-all', () => {
+      this.clearAllZoomOverrides();
+    });
+
     // Find-in-page IPC. The renderer is the source of truth for the query and
     // direction; main just proxies to webContents and forwards 'found-in-page'
     // events back via the 'find-result' channel (see attachViewEvents).
@@ -1242,6 +1372,13 @@ export class TabManager {
     ipcMain.removeHandler('tabs:reopen-closed-at');
     ipcMain.removeHandler('tabs:get-closed-tabs');
     ipcMain.removeHandler('tabs:show-context-menu');
+    ipcMain.removeHandler('zoom:get-percent');
+    ipcMain.removeHandler('zoom:in');
+    ipcMain.removeHandler('zoom:out');
+    ipcMain.removeHandler('zoom:reset');
+    ipcMain.removeHandler('zoom:list-overrides');
+    ipcMain.removeHandler('zoom:remove-override');
+    ipcMain.removeHandler('zoom:clear-all');
     ipcMain.removeHandler('find:start');
     ipcMain.removeHandler('find:next');
     ipcMain.removeHandler('find:prev');

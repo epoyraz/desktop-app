@@ -6,6 +6,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import type { TabState } from '../../main/tabs/TabManager';
 
+declare const electronAPI: {
+  tabs: {
+    showContextMenu: (tabId: string) => Promise<void>;
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -33,6 +39,7 @@ interface TabItemProps {
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDrop: (e: React.DragEvent, toIndex: number) => void;
   isDragOver: boolean;
+  onContextMenu: (e: React.MouseEvent) => void;
 }
 
 function TabItem({
@@ -45,6 +52,7 @@ function TabItem({
   onDragOver,
   onDrop,
   isDragOver,
+  onContextMenu,
 }: TabItemProps): React.ReactElement {
   return (
     <div
@@ -66,6 +74,7 @@ function TabItem({
       onDragStart={(e) => onDragStart(e, tab.id, index)}
       onDragOver={(e) => onDragOver(e, index)}
       onDrop={(e) => onDrop(e, index)}
+      onContextMenu={onContextMenu}
     >
       {/* Favicon / loading spinner */}
       <span className="tab-item__favicon" aria-hidden="true">
@@ -169,6 +178,11 @@ export function TabStrip({
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             isDragOver={dragOverIndex === index}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              electronAPI.tabs.showContextMenu(tab.id);
+            }}
           />
         ))}
         {/* + button sits right after the last tab (Chrome-style), not pinned right */}

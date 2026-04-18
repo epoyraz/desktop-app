@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     getClosedTabs: (): Promise<ClosedTabRecord[]> =>
       ipcRenderer.invoke('tabs:get-closed-tabs'),
+
+    showContextMenu: (tabId: string): Promise<void> =>
+      ipcRenderer.invoke('tabs:show-context-menu', tabId),
   },
 
   // CDP info for agent integration
