@@ -20,13 +20,13 @@ export function parseNavigationInput(input: string): string {
   }
 
   if (BARE_DOMAIN_RE.test(trimmed) || LOCALHOST_RE.test(trimmed) || IP_RE.test(trimmed) || IP6_RE.test(trimmed)) {
-    return \`https://\${trimmed}\`;
+    return `https://\${trimmed}`;
   }
 
   // host:port pattern (e.g. "myserver:8080")
   if (/^[a-z0-9.-]+:\d{1,5}(\/.*)?$/i.test(trimmed)) {
-    return \`https://\${trimmed}\`;
+    return `https://\${trimmed}`;
   }
 
-  return \`\${GOOGLE_SEARCH_BASE}\${encodeURIComponent(trimmed)}\`;
+  return `\${GOOGLE_SEARCH_BASE}\${encodeURIComponent(trimmed)}`;
 }
