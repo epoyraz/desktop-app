@@ -348,6 +348,9 @@
 }
 
 .tab-item__favicon img {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 1px;
   width: 16px;
   height: 16px;
   object-fit: contain;
