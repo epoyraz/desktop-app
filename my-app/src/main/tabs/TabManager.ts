@@ -25,6 +25,15 @@ import { HistoryStore } from '../history/HistoryStore';
 import { attachContextMenu } from '../contextMenu/ContextMenuController';
 import { getFormDetectorScript, FORM_DETECTOR_PREFIX } from '../passwords/formDetector';
 import { readPrefs } from '../settings/ipc';
+import {
+  maybeUpgradeUrl,
+  trackPendingUpgrade,
+  getPendingUpgrade,
+  clearPendingUpgrade,
+  allowHttpForOrigin,
+  buildInterstitialHtml,
+  HTTPS_PROCEED_PREFIX,
+} from '../https/HttpsFirstController';
 
 // Forge VitePlugin globals for the new-tab page (injected at build time)
 declare const NEWTAB_VITE_DEV_SERVER_URL: string | undefined;
@@ -649,11 +658,23 @@ export class TabManager {
       return;
     }
     const nav = this.navControllers.get(tabId);
-    if (nav) {
-      nav.navigate(url);
-    } else {
+    if (!nav) {
       mainLogger.warn('TabManager.navigate.noController', { tabId });
+      return;
     }
+
+    const upgrade = maybeUpgradeUrl(url);
+    if (upgrade.upgraded) {
+      mainLogger.info('TabManager.navigate.httpsUpgrade', {
+        tabId,
+        originalUrl: url,
+        upgradedUrl: upgrade.url,
+      });
+      trackPendingUpgrade(tabId, url);
+    } else {
+      clearPendingUpgrade(tabId);
+    }
+    nav.navigate(upgrade.url);
   }
 
   navigateActive(input: string): void {
@@ -1289,6 +1310,9 @@ export class TabManager {
 
     wc.on('did-navigate', (_e, url) => {
       mainLogger.info('TabManager.tab.navigate', { tabId, url });
+      if (url.startsWith('https://')) {
+        clearPendingUpgrade(tabId);
+      }
       this.applyPersistedZoom(wc);
       this.sendTabUpdate(tabId);
       this.saveSession();
@@ -1318,8 +1342,44 @@ export class TabManager {
       }
     });
 
+    // HTTPS-First: if an HTTPS upgrade fails, show an interstitial warning page
+    wc.on('did-fail-load', (_e, errorCode, _errorDesc, validatedURL) => {
+      const pendingHttpUrl = getPendingUpgrade(tabId);
+      if (!pendingHttpUrl) return;
+
+      mainLogger.info('TabManager.tab.httpsUpgradeFailed', {
+        tabId,
+        errorCode,
+        validatedURL,
+        pendingHttpUrl,
+      });
+
+      clearPendingUpgrade(tabId);
+
+      let hostname = '';
+      try { hostname = new URL(pendingHttpUrl).hostname; } catch { hostname = pendingHttpUrl; }
+
+      const interstitialHtml = buildInterstitialHtml(pendingHttpUrl, hostname);
+      const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(interstitialHtml);
+      wc.loadURL(dataUrl);
+    });
+
     // Listen for password form submissions via console-message prefix
     wc.on('console-message', (_e, _level, message) => {
+      // HTTPS-First: intercept "proceed to HTTP" from interstitial page
+      // Only trust this message from our data: URL interstitial, not arbitrary pages
+      const currentUrl = wc.getURL();
+      if (message.startsWith(HTTPS_PROCEED_PREFIX) && currentUrl.startsWith('data:text/html')) {
+        const httpUrl = message.slice(HTTPS_PROCEED_PREFIX.length);
+        mainLogger.info('TabManager.tab.httpsProceed', { tabId, httpUrl });
+        try {
+          const host = new URL(httpUrl).host;
+          allowHttpForOrigin(host);
+        } catch { /* ignore parse errors */ }
+        clearPendingUpgrade(tabId);
+        wc.loadURL(httpUrl);
+        return;
+      }
       if (!message.startsWith(FORM_DETECTOR_PREFIX)) return;
       try {
         const json = message.slice(FORM_DETECTOR_PREFIX.length);
