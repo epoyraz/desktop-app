@@ -15,7 +15,7 @@ import path from 'node:path';
 // dev-time fallback.
 loadDotEnv({ path: path.resolve(__dirname, '..', '..', '.env') });
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, MenuItemConstructorOptions, dialog, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import { createShellWindow } from './window';
 import { TabManager } from './tabs/TabManager';
@@ -115,6 +115,14 @@ function openShellAndWire(): BrowserWindow {
   mainLogger.info('main.openShellAndWire', { msg: 'Creating shell window' });
   shellWindow = createShellWindow();
   tabManager = new TabManager(shellWindow);
+
+  // Wire bookmark-aware URL matching into the navigation heuristic.
+  if (bookmarkStore) {
+    const store = bookmarkStore;
+    tabManager.setUrlMatchFn((candidate: string) => {
+      return store.isUrlBookmarked(candidate) ? candidate : null;
+    });
+  }
   tabManager.restoreSession();
 
   // History menu's "Recently Closed" submenu is dynamic — rebuild the whole

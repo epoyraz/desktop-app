@@ -10,12 +10,15 @@ import {
   ipcMain,
   nativeImage,
   app,
+  Menu,
+  MenuItem,
 } from 'electron';
 // eslint-disable-next-line import/no-unresolved
 import { v4 as uuidv4 } from 'uuid';
 import { NavigationController } from './NavigationController';
 import { SessionStore, PersistedSession, PersistedTab } from './SessionStore';
-import { parseNavigationInput } from '../navigation';
+import { ZoomStore, extractOrigin, zoomLevelToPercent, type ZoomEntry } from './ZoomStore';
+import { parseNavigationInput, UrlMatchFn } from '../navigation';
 import { mainLogger } from '../logger';
 import { attachContextMenu } from '../contextMenu/ContextMenuController';
 
@@ -98,10 +101,13 @@ export class TabManager {
   // before the NSMenu accelerator can fire. Kept as a callback so TabManager
   // does not import pill.ts.
   private pillToggle: (() => void) | null = null;
+  private zoomStore: ZoomStore;
+  private urlMatchFn: UrlMatchFn | null = null;
 
   constructor(win: BrowserWindow) {
     this.win = win;
     this.sessionStore = new SessionStore();
+    this.zoomStore = new ZoomStore();
     this.registerIpcHandlers();
   }
 
@@ -116,6 +122,10 @@ export class TabManager {
    */
   setPillToggle(cb: (() => void) | null): void {
     this.pillToggle = cb;
+  }
+
+  setUrlMatchFn(fn: UrlMatchFn | null): void {
+    this.urlMatchFn = fn;
   }
 
   setChromeOffset(offset: number): void {
@@ -490,7 +500,7 @@ export class TabManager {
   // ---------------------------------------------------------------------------
 
   navigate(tabId: string, input: string): void {
-    const url = parseNavigationInput(input);
+    const url = parseNavigationInput(input, this.urlMatchFn ?? undefined);
     const nav = this.navControllers.get(tabId);
     if (nav) {
       nav.navigate(url);
@@ -550,6 +560,109 @@ export class TabManager {
   }
 
   // ---------------------------------------------------------------------------
+  // DevTools (Issue #75 — Cmd+Opt+I / Cmd+Opt+J / Inspect Element)
+  // ---------------------------------------------------------------------------
+
+  private devToolsDockMode: 'right' | 'bottom' | 'undocked' | 'detach' = 'right';
+
+  getDevToolsDockMode(): 'right' | 'bottom' | 'undocked' | 'detach' {
+    return this.devToolsDockMode;
+  }
+
+  setDevToolsDockMode(mode: 'right' | 'bottom' | 'undocked' | 'detach'): void {
+    this.devToolsDockMode = mode;
+    mainLogger.info('TabManager.setDevToolsDockMode', { mode });
+  }
+
+  openDevToolsForActive(): void {
+    const wc = this.getActiveWebContents();
+    if (!wc) return;
+    const mode = this.devToolsDockMode;
+    mainLogger.info('TabManager.openDevToolsForActive', { mode, tabId: this.activeTabId });
+    if (wc.isDevToolsOpened()) {
+      wc.devToolsWebContents?.focus();
+    } else {
+      wc.openDevTools({ mode });
+    }
+  }
+
+  openDevToolsConsoleForActive(): void {
+    const wc = this.getActiveWebContents();
+    if (!wc) return;
+    const mode = this.devToolsDockMode;
+    mainLogger.info('TabManager.openDevToolsConsoleForActive', { mode, tabId: this.activeTabId });
+    if (wc.isDevToolsOpened()) {
+      wc.devToolsWebContents?.focus();
+    } else {
+      wc.openDevTools({ mode, activate: true });
+    }
+    wc.once('devtools-opened', () => {
+      wc.devToolsWebContents?.executeJavaScript(
+        'DevToolsAPI.showPanel("console")'
+      ).catch(() => {});
+    });
+  }
+
+  inspectElementInActive(x: number, y: number): void {
+    const wc = this.getActiveWebContents();
+    if (!wc) return;
+    mainLogger.info('TabManager.inspectElementInActive', { x, y, tabId: this.activeTabId });
+    wc.inspectElement(x, y);
+  }
+
+  closeDevToolsForActive(): void {
+    const wc = this.getActiveWebContents();
+    if (!wc) return;
+    if (wc.isDevToolsOpened()) {
+      mainLogger.info('TabManager.closeDevToolsForActive', { tabId: this.activeTabId });
+      wc.closeDevTools();
+    }
+  }
+
+  toggleDevToolsForActive(): void {
+    const wc = this.getActiveWebContents();
+    if (!wc) return;
+    if (wc.isDevToolsOpened()) {
+      wc.closeDevTools();
+    } else {
+      this.openDevToolsForActive();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Stop / Duplicate / Print (Chrome menu parity, issue #80)
+  // ---------------------------------------------------------------------------
+
+  stopActive(): void {
+    if (!this.activeTabId) return;
+    const view = this.tabs.get(this.activeTabId);
+    if (!view) return;
+    view.webContents.stop();
+    mainLogger.debug('TabManager.stopActive', { tabId: this.activeTabId });
+  }
+
+  duplicateActiveTab(): void {
+    if (!this.activeTabId) return;
+    const view = this.tabs.get(this.activeTabId);
+    if (!view) return;
+    const url = view.webContents.getURL();
+    if (!url) return;
+    mainLogger.info('TabManager.duplicateActiveTab', { tabId: this.activeTabId, url });
+    this.createTab(url);
+  }
+
+  printActive(): void {
+    if (!this.activeTabId) return;
+    const view = this.tabs.get(this.activeTabId);
+    if (!view) return;
+    mainLogger.info('TabManager.printActive', { tabId: this.activeTabId });
+    view.webContents.print({}, (success, failureReason) => {
+      mainLogger.info('TabManager.printActive.result', { success, failureReason });
+    });
+  }
+
   // Zoom (Chrome-parity Cmd+=, Cmd+-, Cmd+0 on active tab)
   // ---------------------------------------------------------------------------
   // Electron zoom-level steps of 0.5 correspond roughly to Chrome's 10% stops
@@ -897,6 +1010,115 @@ export class TabManager {
     this.win.webContents.send(channel, payload);
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Tab context menu actions (Issue #2)
+  // ---------------------------------------------------------------------------
+
+  duplicateTab(tabId: string): void {
+    const view = this.tabs.get(tabId);
+    if (!view) {
+      mainLogger.warn('TabManager.duplicateTab.unknown', { tabId });
+      return;
+    }
+    const url = view.webContents.getURL();
+    mainLogger.info('TabManager.duplicateTab', { tabId, url });
+    this.createTab(url);
+  }
+
+  closeOtherTabs(tabId: string): void {
+    const toClose = this.tabOrder.filter((id) => id !== tabId);
+    mainLogger.info('TabManager.closeOtherTabs', { keepTabId: tabId, closeCount: toClose.length });
+    for (const id of toClose) {
+      this.closeTab(id);
+    }
+  }
+
+  closeTabsToRight(tabId: string): void {
+    const idx = this.tabOrder.indexOf(tabId);
+    if (idx === -1) return;
+    const toClose = this.tabOrder.slice(idx + 1);
+    mainLogger.info('TabManager.closeTabsToRight', { tabId, closeCount: toClose.length });
+    for (const id of toClose) {
+      this.closeTab(id);
+    }
+  }
+
+  showTabContextMenu(tabId: string): void {
+    const view = this.tabs.get(tabId);
+    if (!view) {
+      mainLogger.warn('TabManager.showTabContextMenu.unknown', { tabId });
+      return;
+    }
+
+    const tabIndex = this.tabOrder.indexOf(tabId);
+    const tabCount = this.tabOrder.length;
+    const tabsToRight = tabCount - tabIndex - 1;
+    const url = view.webContents.getURL();
+    const isMuted = view.webContents.isAudioMuted();
+
+    mainLogger.info('TabManager.showTabContextMenu', { tabId, tabIndex, tabCount, url, isMuted });
+
+    const menu = new Menu();
+
+    menu.append(new MenuItem({
+      label: 'Reload',
+      click: () => this.reload(tabId),
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Duplicate',
+      click: () => this.duplicateTab(tabId),
+    }));
+
+    menu.append(new MenuItem({ type: 'separator' }));
+
+    menu.append(new MenuItem({
+      label: isMuted ? 'Unmute Tab' : 'Mute Tab',
+      click: () => {
+        view.webContents.setAudioMuted(!isMuted);
+        mainLogger.info('TabManager.tabContextMenu.toggleMute', { tabId, muted: !isMuted });
+      },
+    }));
+
+    menu.append(new MenuItem({ type: 'separator' }));
+
+    menu.append(new MenuItem({
+      label: 'Close Tab',
+      click: () => this.closeTab(tabId),
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Close Other Tabs',
+      enabled: tabCount > 1,
+      click: () => this.closeOtherTabs(tabId),
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Close Tabs to the Right',
+      enabled: tabsToRight > 0,
+      click: () => this.closeTabsToRight(tabId),
+    }));
+
+    menu.append(new MenuItem({ type: 'separator' }));
+
+    menu.append(new MenuItem({
+      label: 'Reopen Closed Tab',
+      enabled: this.closedStack.length > 0,
+      click: () => this.reopenLastClosed(),
+    }));
+
+    menu.append(new MenuItem({
+      label: 'Bookmark All Tabs\u2026',
+      click: () => {
+        mainLogger.info('TabManager.tabContextMenu.bookmarkAllTabs', { tabCount });
+        this.safeSend('bookmark-all-tabs-request', {});
+      },
+    }));
+
+    menu.popup({ window: this.win });
+  }
+
   // ---------------------------------------------------------------------------
   // IPC handlers
   // ---------------------------------------------------------------------------
@@ -973,6 +1195,11 @@ export class TabManager {
       return this.getClosedTabs();
     });
 
+
+    ipcMain.handle('tabs:show-context-menu', (_e, tabId: string) => {
+      this.showTabContextMenu(tabId);
+    });
+
     // Find-in-page IPC. The renderer is the source of truth for the query and
     // direction; main just proxies to webContents and forwards 'found-in-page'
     // events back via the 'find-result' channel (see attachViewEvents).
@@ -1014,6 +1241,7 @@ export class TabManager {
     ipcMain.removeHandler('tabs:reopen-last-closed');
     ipcMain.removeHandler('tabs:reopen-closed-at');
     ipcMain.removeHandler('tabs:get-closed-tabs');
+    ipcMain.removeHandler('tabs:show-context-menu');
     ipcMain.removeHandler('find:start');
     ipcMain.removeHandler('find:next');
     ipcMain.removeHandler('find:prev');
