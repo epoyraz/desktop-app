@@ -8,16 +8,18 @@ import { mainLogger } from '../logger';
 import { PermissionStore, PermissionType, PermissionState } from './PermissionStore';
 import { PermissionManager, PermissionDecision } from './PermissionManager';
 import { ProtocolHandlerStore } from './ProtocolHandlerStore';
+import { PermissionAutoRevoker } from './PermissionAutoRevoker';
 
 export interface RegisterPermissionHandlersOptions {
   store: PermissionStore;
   manager: PermissionManager;
   getShellWindow: () => BrowserWindow | null;
   protocolHandlerStore?: ProtocolHandlerStore;
+  autoRevoker?: PermissionAutoRevoker;
 }
 
 export function registerPermissionHandlers(opts: RegisterPermissionHandlersOptions): void {
-  const { store, manager, protocolHandlerStore } = opts;
+  const { store, manager, protocolHandlerStore, autoRevoker } = opts;
 
   ipcMain.handle('permissions:respond', (_e, promptId: string, decision: string) => {
     mainLogger.info('permissions:respond', { promptId, decision });
@@ -60,6 +62,45 @@ export function registerPermissionHandlers(opts: RegisterPermissionHandlersOptio
   ipcMain.handle('permissions:reset-all', () => {
     store.resetAllSitePermissions();
   });
+
+  // Auto-revoke handlers (issue #58)
+  ipcMain.handle('permissions:auto-revoke-scan', () => {
+    if (!autoRevoker) {
+      mainLogger.warn('permissions:auto-revoke-scan.no-revoker');
+      return { candidates: [], scannedAt: Date.now() };
+    }
+    mainLogger.info('permissions:auto-revoke-scan');
+    return autoRevoker.scan();
+  });
+
+  ipcMain.handle(
+    'permissions:auto-revoke-apply',
+    (_e, revocations: Array<{ origin: string; permissionType: string }>) => {
+      if (!autoRevoker) {
+        mainLogger.warn('permissions:auto-revoke-apply.no-revoker');
+        return 0;
+      }
+      mainLogger.info('permissions:auto-revoke-apply', { count: revocations.length });
+      return autoRevoker.applyRevoke(
+        revocations.map((r) => ({
+          origin: r.origin,
+          permissionType: r.permissionType as PermissionType,
+        })),
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'permissions:auto-revoke-opt-out',
+    (_e, origin: string, permissionType: string) => {
+      if (!autoRevoker) {
+        mainLogger.warn('permissions:auto-revoke-opt-out.no-revoker');
+        return;
+      }
+      mainLogger.info('permissions:auto-revoke-opt-out', { origin, permissionType });
+      autoRevoker.optOut(origin, permissionType as PermissionType);
+    },
+  );
 
   // Protocol handler management (chrome://settings/handlers parity)
   if (protocolHandlerStore) {
@@ -117,6 +158,9 @@ export function unregisterPermissionHandlers(): void {
   ipcMain.removeHandler('permissions:set-default');
   ipcMain.removeHandler('permissions:get-all');
   ipcMain.removeHandler('permissions:reset-all');
+  ipcMain.removeHandler('permissions:auto-revoke-scan');
+  ipcMain.removeHandler('permissions:auto-revoke-apply');
+  ipcMain.removeHandler('permissions:auto-revoke-opt-out');
   ipcMain.removeHandler('protocol-handlers:get-all');
   ipcMain.removeHandler('protocol-handlers:get-for-protocol');
   ipcMain.removeHandler('protocol-handlers:get-for-origin');

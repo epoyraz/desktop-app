@@ -34,6 +34,7 @@ const TAB_PRIVACY      = 'privacy'          as const;
 const TAB_PASSWORDS    = 'passwords'        as const;
 const TAB_ZOOM         = 'site-zoom'        as const;
 const TAB_CONTENT      = 'content'          as const;
+const TAB_PERMISSIONS  = 'permissions'     as const;
 
 type TabId =
   | typeof TAB_API_KEY
@@ -45,6 +46,7 @@ type TabId =
   | typeof TAB_PRIVACY
   | typeof TAB_ZOOM
   | typeof TAB_CONTENT
+  | typeof TAB_PERMISSIONS
   | typeof TAB_DANGER;
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -57,6 +59,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: TAB_PRIVACY,    label: 'Privacy and security' },
   { id: TAB_ZOOM,       label: 'Site Zoom' },
   { id: TAB_CONTENT,    label: 'Content' },
+  { id: TAB_PERMISSIONS, label: 'Permissions' },
   { id: TAB_DANGER,     label: 'Danger Zone' },
 ];
 
@@ -163,6 +166,18 @@ declare global {
       getAllContentCategoryOverrides: () => Promise<Array<{ origin: string; category: string; state: string; updatedAt: number }>>;
       clearContentCategoryOrigin: (origin: string) => Promise<void>;
       resetAllContentCategoryOverrides: () => Promise<void>;
+      scanAutoRevokePermissions: () => Promise<{
+        candidates: Array<{
+          origin: string;
+          permissionType: string;
+          grantedAt: number;
+          daysSinceVisit: number | null;
+          lastVisit: number | null;
+        }>;
+        scannedAt: number;
+      }>;
+      applyAutoRevokePermissions: (revocations: Array<{ origin: string; permissionType: string }>) => Promise<number>;
+      optOutAutoRevoke: (origin: string, permissionType: string) => Promise<void>;
     };
   }
 }
@@ -1711,6 +1726,217 @@ function ContentCategoriesTab(): React.ReactElement {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Permissions tab — auto-revoke unused permissions (issue #58)
+// ---------------------------------------------------------------------------
+
+const PERMISSION_TYPE_LABELS: Record<string, string> = {
+  notifications: 'Notifications',
+  geolocation:   'Location',
+  camera:        'Camera',
+  microphone:    'Microphone',
+};
+
+interface AutoRevokeEntry {
+  origin: string;
+  permissionType: string;
+  grantedAt: number;
+  daysSinceVisit: number | null;
+  lastVisit: number | null;
+}
+
+function formatDaysSinceVisit(days: number | null): string {
+  if (days === null) return 'Never visited';
+  if (days === 0) return 'Visited today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? '1 month ago' : `${months} months ago`;
+}
+
+function PermissionsTab(): React.ReactElement {
+  const toast = useToast();
+  const [candidates, setCandidates] = React.useState<AutoRevokeEntry[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [revoking, setRevoking] = React.useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = React.useState<Set<string>>(new Set());
+
+  const candidateKey = (c: AutoRevokeEntry): string =>
+    `${c.origin}::${c.permissionType}`;
+
+  const loadCandidates = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await window.settingsAPI.scanAutoRevokePermissions();
+      setCandidates(result.candidates);
+      console.debug('[PermissionsTab] scan result', {
+        candidateCount: result.candidates.length,
+        scannedAt: result.scannedAt,
+      });
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Scan failed', message: (err as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { void loadCandidates(); }, [loadCandidates]);
+
+  async function handleRevoke(candidate: AutoRevokeEntry): Promise<void> {
+    const key = candidateKey(candidate);
+    setRevoking((prev) => new Set([...prev, key]));
+    try {
+      await window.settingsAPI.applyAutoRevokePermissions([
+        { origin: candidate.origin, permissionType: candidate.permissionType },
+      ]);
+      setCandidates((prev) => prev.filter((c) => candidateKey(c) !== key));
+      toast.show({ variant: 'success', title: 'Permission revoked', message: `${PERMISSION_TYPE_LABELS[candidate.permissionType] ?? candidate.permissionType} removed for ${candidate.origin}` });
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Revoke failed', message: (err as Error).message });
+    } finally {
+      setRevoking((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
+  async function handleRevokeAll(): Promise<void> {
+    const visible = candidates.filter((c) => !dismissed.has(candidateKey(c)));
+    if (visible.length === 0) return;
+    try {
+      const revocations = visible.map((c) => ({
+        origin: c.origin,
+        permissionType: c.permissionType,
+      }));
+      await window.settingsAPI.applyAutoRevokePermissions(revocations);
+      setCandidates([]);
+      toast.show({ variant: 'success', title: `${visible.length} permission${visible.length === 1 ? '' : 's'} revoked` });
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Revoke all failed', message: (err as Error).message });
+    }
+  }
+
+  async function handleKeep(candidate: AutoRevokeEntry): Promise<void> {
+    const key = candidateKey(candidate);
+    try {
+      await window.settingsAPI.optOutAutoRevoke(candidate.origin, candidate.permissionType);
+      setDismissed((prev) => new Set([...prev, key]));
+      toast.show({ variant: 'info', title: 'Permission kept', message: `${candidate.origin} will not be flagged again this session` });
+    } catch (err) {
+      toast.show({ variant: 'error', title: 'Failed to keep permission', message: (err as Error).message });
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="settings-section">
+        <h2 className="settings-section-title">Permissions</h2>
+        <div className="settings-loading">
+          <Spinner size="md" />
+        </div>
+      </div>
+    );
+  }
+
+  const visible = candidates.filter((c) => !dismissed.has(candidateKey(c)));
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Permissions</h2>
+      <p className="settings-section-desc">
+        Sites that were granted permissions but have not been visited in the
+        last 90 days. Revoking permissions here follows the same safety-first
+        policy Chrome uses for inactive sites.
+      </p>
+
+      {visible.length === 0 ? (
+        <Card variant="outline" padding="md" className="settings-card">
+          <p style={{ color: 'var(--color-fg-tertiary)', fontSize: 13 }}>
+            No unused permissions found. All granted permissions belong to
+            recently visited sites.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <Card variant="default" padding="none" className="settings-card">
+            {visible.map((candidate, idx) => {
+              const key = candidateKey(candidate);
+              const isRevoking = revoking.has(key);
+              const typeLabel = PERMISSION_TYPE_LABELS[candidate.permissionType] ?? candidate.permissionType;
+              return (
+                <div
+                  key={key}
+                  className={`settings-scope-row ${idx < visible.length - 1 ? 'settings-scope-row--bordered' : ''}`}
+                >
+                  <div className="settings-scope-info">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="settings-scope-label">{candidate.origin}</span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: '2px 7px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'var(--color-bg-elevated)',
+                          color: 'var(--color-fg-secondary)',
+                          border: '1px solid var(--color-border-subtle)',
+                        }}
+                      >
+                        {typeLabel}
+                      </span>
+                    </div>
+                    <span className="settings-scope-name">
+                      {formatDaysSinceVisit(candidate.daysSinceVisit)}
+                    </span>
+                  </div>
+                  <div className="settings-scope-actions">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleKeep(candidate)}
+                      disabled={isRevoking}
+                    >
+                      Keep
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => void handleRevoke(candidate)}
+                      loading={isRevoking}
+                    >
+                      Revoke
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void loadCandidates()}
+            >
+              Rescan
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => void handleRevokeAll()}
+            >
+              Revoke all ({visible.length})
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Danger Zone tab
 // ---------------------------------------------------------------------------
@@ -1866,6 +2092,7 @@ function SettingsInner(): React.ReactElement {
     [TAB_PROFILES]:   <ProfilesTab />,
     [TAB_PRIVACY]:    <PrivacyTab openDialog={clearDataOpen} onDialogChange={setClearDataOpen} />,
     [TAB_ZOOM]:       <SiteZoomTab />,
+    [TAB_PERMISSIONS]: <PermissionsTab />,
     [TAB_CONTENT]:    <ContentCategoriesTab />,
     [TAB_DANGER]:     <DangerZoneTab />,
   };
