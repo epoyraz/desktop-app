@@ -468,9 +468,17 @@ export class TabManager {
     // Focus the URL bar so the user can type immediately. activateTab just
     // called view.webContents.focus(), so we pull OS focus back to the shell
     // window and then fire the same IPC Cmd+L uses.
+    // Re-send after did-finish-load because Electron refocuses the tab's
+    // webContents when the page finishes loading, stealing focus back.
     if (isUserInitiated && !this.win.isDestroyed() && !this.win.webContents.isDestroyed()) {
-      this.win.webContents.focus();
-      this.win.webContents.send('focus-url-bar');
+      const focusUrlBar = (): void => {
+        if (!this.win.isDestroyed() && !this.win.webContents.isDestroyed()) {
+          this.win.webContents.focus();
+          this.win.webContents.send("focus-url-bar");
+        }
+      };
+      focusUrlBar();
+      view.webContents.once("did-finish-load", focusUrlBar);
     }
 
     return tabId;

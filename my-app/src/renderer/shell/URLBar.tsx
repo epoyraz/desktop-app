@@ -90,6 +90,7 @@ interface URLBarProps {
 }
 
 function getSecurityStatus(url: string): 'secure' | 'insecure' | 'none' {
+  if (NEWTAB_RE.test(url)) return 'none';
   if (SECURE_RE.test(url)) return 'secure';
   if (INSECURE_RE.test(url)) return 'insecure';
   return 'none';
@@ -105,7 +106,7 @@ function getSecurityStatus(url: string): 'secure' | 'insecure' | 'none' {
  */
 function displayUrl(url: string): string {
   // New-tab / about:blank: omnibox reads empty so placeholder shows.
-  if (!url || BLANK_RE.test(url)) return '';
+  if (!url || BLANK_RE.test(url) || NEWTAB_RE.test(url)) return '';
 
   // Only elide http/https URLs; pass through chrome://, file://, etc. as-is.
   const isHttps = SECURE_RE.test(url);
@@ -323,7 +324,7 @@ export function URLBar({
     editInputRef.current = inputValue;
     // On focus, show the full URL so the user can edit it — except for blank
     // new-tab placeholders, where the input stays empty so typing is fresh.
-    setInputValue(BLANK_RE.test(url) ? '' : url);
+    setInputValue((BLANK_RE.test(url) || NEWTAB_RE.test(url)) ? '' : url);
     inputRef.current?.select();
   }, [url, inputValue]);
 
@@ -405,7 +406,7 @@ export function URLBar({
 
   const security = getSecurityStatus(url);
   // Hide the star on blank/new-tab URLs — nothing meaningful to bookmark.
-  const starVisible = !!url && !BLANK_RE.test(url);
+  const starVisible = !!url && !BLANK_RE.test(url) && !NEWTAB_RE.test(url);
 
   const [pageInfoOpen, setPageInfoOpen] = useState(false);
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
