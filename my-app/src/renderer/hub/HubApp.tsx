@@ -83,16 +83,12 @@ export function HubApp(): React.ReactElement {
     'nav.open': () => {
       console.log('[VimKeys] open session', sessions[focusIndex]?.id);
     },
-
     'goto.dashboard': () => setViewMode('dashboard'),
     'goto.agents': () => setViewMode('grid'),
     'goto.list': () => setViewMode('list'),
     'goto.settings': () => setSettingsOpen(true),
-
     'search.open': () => setCmdBarOpen(true),
-
     'action.create': () => setCmdBarOpen(true),
-
     'scroll.halfDown': () => {
       const el = document.querySelector('.hub-grid, .list-view__body, .dashboard');
       if (el) el.scrollBy({ top: el.clientHeight / 2, behavior: 'smooth' });
@@ -101,7 +97,6 @@ export function HubApp(): React.ReactElement {
       const el = document.querySelector('.hub-grid, .list-view__body, .dashboard');
       if (el) el.scrollBy({ top: -(el.clientHeight / 2), behavior: 'smooth' });
     },
-
     'meta.help': () => setHelpOpen((prev) => !prev),
     'meta.commandPalette': () => setCmdBarOpen((prev) => !prev),
     'meta.escape': () => {
@@ -112,17 +107,6 @@ export function HubApp(): React.ReactElement {
   }), [sessions, focusIndex, helpOpen, settingsOpen, cmdBarOpen]);
 
   const vim = useVimKeys(vimHandlers);
-
-  useEffect(() => {
-    const api = (window as unknown as { electronAPI?: { on?: { openSettings?: (cb: () => void) => () => void } } }).electronAPI;
-    if (api?.on?.openSettings) {
-      const unsub = api.on.openSettings(() => {
-        console.log('[HubApp] open-settings via IPC');
-        setSettingsOpen(true);
-      });
-      return unsub;
-    }
-  }, []);
 
   const handleCreateSession = useCallback((prompt: string) => {
     const id = `session-${++sessionCounter}`;

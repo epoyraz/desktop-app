@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { formatKeyForDisplay, CATEGORY_ORDER, type KeyBinding, type KeyCategory } from './keybindings';
+import React from 'react';
+import type { KeyBinding } from './keybindings';
 
 interface KeybindingsOverlayProps {
   open: boolean;
@@ -8,76 +8,41 @@ interface KeybindingsOverlayProps {
   onOpenSettings: () => void;
 }
 
-function groupByCategory(bindings: KeyBinding[]): Map<KeyCategory, KeyBinding[]> {
-  const groups = new Map<KeyCategory, KeyBinding[]>();
-  for (const cat of CATEGORY_ORDER) {
-    const items = bindings.filter((b) => b.category === cat);
-    if (items.length > 0) groups.set(cat, items);
-  }
-  return groups;
-}
-
-export function KeybindingsOverlay({
-  open,
-  onClose,
-  keybindings,
-  onOpenSettings,
-}: KeybindingsOverlayProps): React.ReactElement | null {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
+export function KeybindingsOverlay({ open, onClose, keybindings, onOpenSettings }: KeybindingsOverlayProps): React.ReactElement | null {
   if (!open) return null;
 
-  const groups = groupByCategory(keybindings);
+  const categories = new Map<string, KeyBinding[]>();
+  for (const kb of keybindings) {
+    const arr = categories.get(kb.category);
+    if (arr) arr.push(kb);
+    else categories.set(kb.category, [kb]);
+  }
 
   return (
-    <div className="keys-overlay__scrim" onClick={onClose}>
-      <div className="keys-overlay" ref={ref} onClick={(e) => e.stopPropagation()}>
-        <div className="keys-overlay__header">
-          <span className="keys-overlay__title">Keyboard shortcuts</span>
-          <button className="keys-overlay__settings-btn" onClick={onOpenSettings}>
-            Customize
-          </button>
+    <div className="cmdbar__scrim" onClick={onClose}>
+      <div className="kb-overlay" onClick={(e) => e.stopPropagation()}>
+        <div className="kb-overlay__header">
+          <span className="kb-overlay__title">Keyboard shortcuts</span>
+          <button className="kb-overlay__settings" onClick={onOpenSettings}>Customize</button>
         </div>
-        <div className="keys-overlay__body">
-          {Array.from(groups.entries()).map(([category, bindings]) => (
-            <div key={category} className="keys-overlay__group">
-              <span className="keys-overlay__group-title">{category}</span>
-              <div className="keys-overlay__list">
-                {bindings.map((binding) => (
-                  <div key={binding.id} className="keys-overlay__row">
-                    <span className="keys-overlay__label">{binding.label}</span>
-                    <span className="keys-overlay__keys">
-                      {formatKeyForDisplay(binding.keys).split(' ').map((part, i) => (
-                        <React.Fragment key={i}>
-                          {i > 0 && <span className="keys-overlay__then">then</span>}
-                          <kbd className="keys-overlay__kbd">{part}</kbd>
-                        </React.Fragment>
-                      ))}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <div className="kb-overlay__body">
+          {Array.from(categories, ([category, bindings]) => (
+            <div key={category} className="kb-overlay__section">
+              <span className="kb-overlay__category">{category}</span>
+              {bindings.map((kb) => (
+                <div key={kb.id} className="kb-overlay__row">
+                  <span className="kb-overlay__label">{kb.label}</span>
+                  <span className="kb-overlay__keys">
+                    {kb.keys.map((k, i) => (
+                      <kbd key={i} className="kb-overlay__kbd">{k}</kbd>
+                    ))}
+                  </span>
+                </div>
+              ))}
             </div>
           ))}
-        </div>
-        <div className="keys-overlay__footer">
-          <span className="keys-overlay__hint">Press <kbd className="keys-overlay__kbd">Esc</kbd> to close</span>
         </div>
       </div>
     </div>
   );
 }
-
-export default KeybindingsOverlay;

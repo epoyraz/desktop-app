@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Group } from '@visx/group';
 import { scaleTime, scaleLinear } from '@visx/scale';
-import { AreaClosed, LinePath } from '@visx/shape';
+import { AreaClosed, LinePath, Line, Bar } from '@visx/shape';
 import { curveMonotoneX } from '@visx/curve';
 import { LinearGradient } from '@visx/gradient';
 import { AxisBottom } from '@visx/axis';
@@ -30,71 +30,136 @@ function formatElapsed(createdAt: number): string {
 
 function ActivityChart({ width, height }: { width: number; height: number }): React.ReactElement | null {
   const data = useMemo(() => generateActivityData(7), []);
-
-  if (width < 10 || height < 10) return null;
+  const [hover, setHover] = useState<ActivityPoint | null>(null);
+  const [hoverX, setHoverX] = useState(0);
 
   const innerW = width - CHART_MARGIN.left - CHART_MARGIN.right;
   const innerH = height - CHART_MARGIN.top - CHART_MARGIN.bottom;
 
-  const xScale = scaleTime({
+  const xScale = useMemo(() => scaleTime({
     domain: [
       Math.min(...data.map((d) => d.time)),
       Math.max(...data.map((d) => d.time)),
     ],
-    range: [0, innerW],
-  });
+    range: [0, Math.max(innerW, 1)],
+  }), [data, innerW]);
 
-  const yScale = scaleLinear({
+  const yScale = useMemo(() => scaleLinear({
     domain: [0, Math.max(...data.map((d) => d.sessions)) * 1.2],
-    range: [innerH, 0],
+    range: [Math.max(innerH, 1), 0],
     nice: true,
-  });
+  }), [data, innerH]);
 
-  const getX = (d: ActivityPoint) => xScale(d.time) ?? 0;
-  const getY = (d: ActivityPoint) => yScale(d.sessions) ?? 0;
+  const getX = useCallback((d: ActivityPoint) => xScale(d.time) ?? 0, [xScale]);
+  const getY = useCallback((d: ActivityPoint) => yScale(d.sessions) ?? 0, [yScale]);
+
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<SVGRectElement>) => {
+      const svg = event.currentTarget.closest('svg');
+      if (!svg) return;
+      const pt = svg.createSVGPoint();
+      pt.x = event.clientX;
+      pt.y = event.clientY;
+      const svgPt = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+      const x = svgPt.x - CHART_MARGIN.left;
+      const time = xScale.invert(x).getTime();
+      let closest = data[0];
+      let minDist = Infinity;
+      for (const d of data) {
+        const dist = Math.abs(d.time - time);
+        if (dist < minDist) { minDist = dist; closest = d; }
+      }
+      setHover(closest);
+      setHoverX(getX(closest));
+    },
+    [data, xScale],
+  );
+
+  if (width < 10 || height < 10) return null;
 
   return (
-    <svg width={width} height={height}>
-      <LinearGradient id="area-gradient" from="rgba(109, 129, 150, 0.25)" to="rgba(109, 129, 150, 0)" />
-      <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
-        <AreaClosed
-          data={data}
-          x={getX}
-          y={getY}
-          yScale={yScale}
-          curve={curveMonotoneX}
-          fill="url(#area-gradient)"
-        />
-        <LinePath
-          data={data}
-          x={getX}
-          y={getY}
-          curve={curveMonotoneX}
-          stroke="var(--color-accent-default)"
-          strokeWidth={1.5}
-          strokeOpacity={0.8}
-        />
-        <AxisBottom
-          top={innerH}
-          scale={xScale}
-          numTicks={7}
-          tickFormat={(v) => {
-            const d = new Date(v as number);
-            return d.toLocaleDateString([], { weekday: 'short' });
-          }}
-          stroke="var(--color-border-subtle)"
-          tickStroke="transparent"
-          tickLabelProps={() => ({
-            fill: 'var(--color-fg-disabled)',
-            fontSize: 10,
-            fontFamily: 'var(--font-ui)',
-            textAnchor: 'middle' as const,
-            dy: 4,
-          })}
-          hideTicks
-        />
-      </Group>
-    </svg>
+    <div className="chart-wrapper">
+      <svg width={width} height={height}>
+        <LinearGradient id="area-gradient" from="rgba(109, 129, 150, 0.25)" to="rgba(109, 129, 150, 0)" />
+        <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
+          <AreaClosed
+            data={data}
+            x={getX}
+            y={getY}
+            yScale={yScale}
+            curve={curveMonotoneX}
+            fill="url(#area-gradient)"
+          />
+          <LinePath
+            data={data}
+            x={getX}
+            y={getY}
+            curve={curveMonotoneX}
+            stroke="var(--color-accent-default)"
+            strokeWidth={1.5}
+            strokeOpacity={0.8}
+          />
+          {hover && (
+            <>
+              <Line
+                from={{ x: hoverX, y: 0 }}
+                to={{ x: hoverX, y: innerH }}
+                stroke="var(--color-fg-disabled)"
+                strokeWidth={1}
+                strokeDasharray="3,3"
+              />
+              <circle
+                cx={hoverX}
+                cy={getY(hover)}
+                r={4}
+                fill="var(--color-accent-default)"
+                stroke="var(--color-bg-base)"
+                strokeWidth={2}
+              />
+            </>
+          )}
+          <Bar
+            x={0}
+            y={0}
+            width={innerW}
+            height={innerH}
+            fill="transparent"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHover(null)}
+          />
+          <AxisBottom
+            top={innerH}
+            scale={xScale}
+            numTicks={7}
+            tickFormat={(v) => {
+              const d = new Date(v as number);
+              return d.toLocaleDateString([], { weekday: 'short' });
+            }}
+            stroke="var(--color-border-subtle)"
+            tickStroke="transparent"
+            tickLabelProps={() => ({
+              fill: 'var(--color-fg-disabled)',
+              fontSize: 10,
+              fontFamily: 'var(--font-ui)',
+              textAnchor: 'middle' as const,
+              dy: 4,
+            })}
+            hideTicks
+          />
+        </Group>
+      </svg>
+      {hover && (
+        <div
+          className="chart-tooltip"
+          style={{ left: hoverX + CHART_MARGIN.left }}
+        >
+          <span className="chart-tooltip__value">{hover.sessions} sessions</span>
+          <span className="chart-tooltip__label">
+            {new Date(hover.time).toLocaleDateString([], { weekday: 'short', hour: 'numeric' })}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
