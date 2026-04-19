@@ -1,138 +1,121 @@
-/**
- * onboardingHandlers.ts — IPC handler registration for the onboarding flow.
- *
- * Registers ipcMain.handle() calls for all channels exposed by src/preload/onboarding.ts:
- *   onboarding:set-agent-name   → AccountStore.save({ agent_name })
- *   onboarding:get-agent-name   → AccountStore.load()?.agent_name
- *   onboarding:start-oauth      → OAuthClient.startAuthFlow(scopes)
- *   onboarding:complete         → AccountStore.save({ onboarding_completed_at }),
- *                                  emit onboarding-complete, close onboarding window,
- *                                  open shell window
- *
- * Call registerOnboardingHandlers() once from main/index.ts inside app.whenReady().
- *
- * D2 logging: every handler entry and exit is logged. Agent name is logged;
- *   email is logged; tokens and passwords are NEVER logged.
- */
-
 import { ipcMain, BrowserWindow } from 'electron';
 import { mainLogger } from '../logger';
 import { AccountStore } from './AccountStore';
-import { OAuthClient } from './OAuthClient';
-import { runOAuthFlow } from '../oauth';
-import type { GoogleOAuthScope, AccountInfo } from '../../shared/types';
-import type { ProfileStore } from '../profiles/ProfileStore';
+import { assertString } from '../ipc-validators';
 
-// Structural type matching what the onboarding preload sends.
-// Also re-exported as `OnboardingCompletePayload` so earlier consumers
-// that imported from this module keep compiling.
-export interface OnboardingCompletePayload {
-  agent_name: string;
-  account: AccountInfo;
-  oauth_scopes: GoogleOAuthScope[];
-}
-type CompletePayload = OnboardingCompletePayload;
+const ANTHROPIC_SERVICE = 'com.agenticbrowser.anthropic';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_VERSION = '2023-06-01';
+const API_TEST_MODEL = 'claude-haiku-4-5-20251001';
+const API_TEST_TIMEOUT_MS = 8000;
 
 export interface OnboardingHandlerDeps {
   accountStore: AccountStore;
-  oauthClient: OAuthClient;
   onboardingWindow: BrowserWindow;
-  /** Factory that creates (or returns existing) shell window after onboarding */
   openShellWindow: () => BrowserWindow;
-  profileStore?: ProfileStore;
 }
 
 export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
-  const { accountStore, oauthClient, onboardingWindow, openShellWindow } = deps;
+  const { accountStore, onboardingWindow, openShellWindow } = deps;
 
   mainLogger.info('onboardingHandlers.register', {
     windowId: onboardingWindow.id,
   });
 
-  // -------------------------------------------------------------------------
-  // onboarding:set-agent-name
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle('onboarding:set-agent-name', (_event, name: string) => {
-    mainLogger.debug('onboardingHandlers.setAgentName', {
-      nameLength: name?.length ?? 0,
+  ipcMain.handle('onboarding:save-api-key', async (_event, key: string) => {
+    const validatedKey = assertString(key, 'key', 500);
+    mainLogger.info('onboardingHandlers.saveApiKey', {
+      keyLength: validatedKey.length,
     });
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const keytar = require('keytar') as {
+        setPassword(s: string, a: string, p: string): Promise<void>;
+      };
+      await keytar.setPassword(ANTHROPIC_SERVICE, 'default', validatedKey);
+      mainLogger.info('onboardingHandlers.saveApiKey.ok');
+    } catch (err) {
+      mainLogger.error('onboardingHandlers.saveApiKey.failed', {
+        error: (err as Error).message,
+      });
+      throw new Error('Failed to save API key to keychain');
+    }
+  });
+
+  ipcMain.handle('onboarding:test-api-key', async (_event, key: string) => {
+    const validatedKey = assertString(key, 'key', 500);
+    mainLogger.info('onboardingHandlers.testApiKey', {
+      keyLength: validatedKey.length,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': validatedKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify({
+          model: API_TEST_MODEL,
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        mainLogger.info('onboardingHandlers.testApiKey.ok');
+        return { success: true };
+      }
+
+      let errorMsg = `HTTP ${response.status}`;
+      try {
+        const body = (await response.json()) as { error?: { message?: string } };
+        if (body?.error?.message) errorMsg = body.error.message;
+      } catch {
+        // ignore parse error
+      }
+
+      mainLogger.warn('onboardingHandlers.testApiKey.failed', {
+        status: response.status,
+        error: errorMsg,
+      });
+      return { success: false, error: errorMsg };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const msg = (err as Error).message ?? 'Network error';
+      mainLogger.warn('onboardingHandlers.testApiKey.exception', { error: msg });
+      return { success: false, error: msg };
+    }
+  });
+
+  ipcMain.handle('onboarding:complete', async () => {
+    mainLogger.info('onboardingHandlers.complete');
 
     const existing = accountStore.load();
     accountStore.save({
-      agent_name: name,
+      agent_name: existing?.agent_name ?? '',
       email: existing?.email ?? '',
       created_at: existing?.created_at,
-      onboarding_completed_at: existing?.onboarding_completed_at,
-    });
-
-    mainLogger.debug('onboardingHandlers.setAgentName.ok', {
-      agentName: name,
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // onboarding:get-agent-name
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle('onboarding:get-agent-name', () => {
-    mainLogger.debug('onboardingHandlers.getAgentName');
-    const data = accountStore.load();
-    mainLogger.debug('onboardingHandlers.getAgentName.result', {
-      hasName: !!data?.agent_name,
-    });
-    return data?.agent_name ?? null;
-  });
-
-  // -------------------------------------------------------------------------
-  // onboarding:start-oauth
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle('onboarding:start-oauth', (_event, scopes: GoogleOAuthScope[]) => {
-    mainLogger.info('onboardingHandlers.startOAuth', {
-      scopeCount: scopes.length,
-    });
-
-    void runOAuthFlow(scopes);
-  });
-
-  // -------------------------------------------------------------------------
-  // onboarding:complete
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle('onboarding:complete', async (_event, payload: CompletePayload) => {
-    mainLogger.info('onboardingHandlers.complete', {
-      agentName: payload.agent_name,
-      email: payload.account.email,
-      scopeCount: payload.oauth_scopes.length,
-    });
-
-    // Persist completed state with timestamp, including selected OAuth scopes
-    const existing = accountStore.load();
-    accountStore.save({
-      agent_name: payload.agent_name,
-      email: payload.account.email,
-      created_at: existing?.created_at,
       onboarding_completed_at: new Date().toISOString(),
-      oauth_scopes: payload.oauth_scopes,
-      scopes_granted: payload.oauth_scopes.length > 0,
     });
 
-    mainLogger.info('onboardingHandlers.complete.accountSaved', {
-      agentName: payload.agent_name,
-      email: payload.account.email,
-    });
+    mainLogger.info('onboardingHandlers.complete.accountSaved');
 
-    // Small delay to let the completion animation play
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await new Promise((resolve) => setTimeout(resolve, 400));
 
-    // Open shell window
     const shell = openShellWindow();
     mainLogger.info('onboardingHandlers.complete.shellOpened', {
       shellWindowId: shell.id,
     });
 
-    // Close onboarding window
     if (!onboardingWindow.isDestroyed()) {
       onboardingWindow.close();
       mainLogger.info('onboardingHandlers.complete.onboardingWindowClosed');
@@ -142,13 +125,9 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
   mainLogger.info('onboardingHandlers.register.done');
 }
 
-/**
- * Remove all onboarding IPC handlers (call when onboarding window is closed).
- */
 export function unregisterOnboardingHandlers(): void {
-  ipcMain.removeHandler('onboarding:set-agent-name');
-  ipcMain.removeHandler('onboarding:get-agent-name');
-  ipcMain.removeHandler('onboarding:start-oauth');
+  ipcMain.removeHandler('onboarding:save-api-key');
+  ipcMain.removeHandler('onboarding:test-api-key');
   ipcMain.removeHandler('onboarding:complete');
   mainLogger.info('onboardingHandlers.unregistered');
 }
