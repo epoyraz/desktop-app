@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { TabState } from '../../main/tabs/TabManager';
+import { usePopupLayer } from './PopupLayerContext';
 
 declare const electronAPI: {
   tabs: {
@@ -121,6 +122,13 @@ export function TabSearchDropdown({
 
   const results = filterAndSort(tabs, query);
 
+  usePopupLayer({
+    id: 'tab-search',
+    type: 'modal',
+    onDismiss: onClose,
+    isOpen: true,
+  });
+
   // Reset selection when results change
   useEffect(() => {
     setSelectedIndex(0);
@@ -145,10 +153,6 @@ export function TabSearchDropdown({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       switch (e.key) {
-        case 'Escape':
-          e.preventDefault();
-          onClose();
-          break;
         case 'ArrowDown':
           e.preventDefault();
           setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
@@ -167,7 +171,7 @@ export function TabSearchDropdown({
           break;
       }
     },
-    [results, selectedIndex, activateTab, onClose],
+    [results, selectedIndex, activateTab],
   );
 
   // Scroll selected item into view

@@ -20,6 +20,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { FindResultPayload } from '../../main/tabs/TabManager';
+import { usePopupLayer } from './PopupLayerContext';
 
 declare const electronAPI: {
   find: {
@@ -54,6 +55,13 @@ export function FindBar({ activeTabId }: FindBarProps): React.ReactElement | nul
     setMatches(0);
     electronAPI.find.stop();
   }, []);
+
+  usePopupLayer({
+    id: 'find-bar',
+    type: 'dropdown',
+    onDismiss: close,
+    isOpen: open,
+  });
 
   // Menu → Cmd+F asks us to open and pre-fills the last query for this tab.
   useEffect(() => {
@@ -113,11 +121,6 @@ export function FindBar({ activeTabId }: FindBarProps): React.ReactElement | nul
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        close();
-        return;
-      }
       if (e.key === 'Enter') {
         e.preventDefault();
         if (!query) return;
@@ -128,7 +131,7 @@ export function FindBar({ activeTabId }: FindBarProps): React.ReactElement | nul
         }
       }
     },
-    [close, query],
+    [query],
   );
 
   if (!open) return null;

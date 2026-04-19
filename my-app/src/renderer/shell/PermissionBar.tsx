@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { usePopupLayer } from './PopupLayerContext';
 
 // -------------------------------------------------------------------------
 // Constants
@@ -132,6 +133,14 @@ export function PermissionBar({ activeTabId }: PermissionBarProps): React.ReactE
     electronAPI.permissions.dismiss(promptId);
     setPrompts((prev) => prev.filter((p) => p.id !== promptId));
   }, []);
+
+  usePopupLayer({
+    id: 'permission-bar',
+    type: 'bar',
+    height: 48,
+    onDismiss: () => { if (current) handleDismiss(current.id); },
+    isOpen: current !== null,
+  });
 
   if (!current) return null;
 

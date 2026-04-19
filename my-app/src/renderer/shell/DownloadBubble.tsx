@@ -6,6 +6,7 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { DownloadItemDTO } from '../../main/downloads/DownloadManager';
+import { usePopupLayer } from './PopupLayerContext';
 
 interface DownloadBubbleProps {
   downloads: DownloadItemDTO[];
@@ -38,6 +39,13 @@ export function DownloadBubble({
 }: DownloadBubbleProps): React.ReactElement {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  usePopupLayer({
+    id: 'download-bubble',
+    type: 'dropdown',
+    onDismiss: onClose,
+    isOpen: true,
+  });
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
@@ -45,14 +53,9 @@ export function DownloadBubble({
         if (!btn) onClose();
       }
     };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEsc);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEsc);
     };
   }, [onClose]);
 

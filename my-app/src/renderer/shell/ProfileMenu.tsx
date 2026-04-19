@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SignOutDialog } from './SignOutDialog';
+import { usePopupLayer } from './PopupLayerContext';
 
 declare const electronAPI: {
   profiles: {
@@ -30,15 +31,11 @@ interface Profile {
   color: string;
 }
 
-interface ProfileMenuProps {
-  onDropdownChange?: (open: boolean) => void;
-}
-
 function getInitial(name: string): string {
   return (name[0] ?? '?').toUpperCase();
 }
 
-export function ProfileMenu({ onDropdownChange }: ProfileMenuProps): React.ReactElement {
+export function ProfileMenu(): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentProfileId, setCurrentProfileId] = useState<string>('default');
@@ -65,15 +62,17 @@ export function ProfileMenu({ onDropdownChange }: ProfileMenuProps): React.React
     });
   }, []);
 
-  const setOpenState = useCallback((next: boolean) => {
-    setOpen(next);
-    onDropdownChange?.(next);
-  }, [onDropdownChange]);
+  usePopupLayer({
+    id: 'profile-menu',
+    type: 'dropdown',
+    onDismiss: () => setOpen(false),
+    isOpen: open,
+  });
 
   const toggle = useCallback(() => {
     console.log('[ProfileMenu] Toggle dropdown, currently:', open ? 'open' : 'closed');
-    setOpenState(!open);
-  }, [open, setOpenState]);
+    setOpen(!open);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -82,38 +81,30 @@ export function ProfileMenu({ onDropdownChange }: ProfileMenuProps): React.React
       const btn = btnRef.current;
       if (menu && !menu.contains(e.target as Node) && btn && !btn.contains(e.target as Node)) {
         console.log('[ProfileMenu] Outside click, closing');
-        setOpenState(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        console.log('[ProfileMenu] Escape pressed, closing');
-        setOpenState(false);
+        setOpen(false);
       }
     };
     const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
-    document.addEventListener('keydown', onKey);
     return () => {
       clearTimeout(t);
       document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
     };
-  }, [open, setOpenState]);
+  }, [open]);
 
   const handleSwitchProfile = useCallback((id: string) => {
     console.log('[ProfileMenu] Switch to profile:', id);
-    setOpenState(false);
+    setOpen(false);
     electronAPI.profiles.switchTo(id).catch((err) => {
       console.error('[ProfileMenu] Switch failed:', err);
     });
-  }, [setOpenState]);
+  }, []);
 
   const handleAddProfile = useCallback(() => {
     const colorIndex = profiles.length % (colors.length || 10);
     const name = `Person ${profiles.length + 1}`;
     const color = colors[colorIndex] ?? '#6366f1';
     console.log('[ProfileMenu] Adding new profile:', name, color);
-    setOpenState(false);
+    setOpen(false);
     electronAPI.profiles.add({ name, color }).then((newProfile) => {
       console.log('[ProfileMenu] Profile created:', newProfile.id);
       setProfiles((prev) => [...prev, newProfile]);
@@ -123,18 +114,18 @@ export function ProfileMenu({ onDropdownChange }: ProfileMenuProps): React.React
     }).catch((err) => {
       console.error('[ProfileMenu] Add profile failed:', err);
     });
-  }, [profiles.length, colors, setOpenState]);
+  }, [profiles.length, colors]);
 
   const handleOpenGuest = useCallback(() => {
     console.log('[ProfileMenu] Opening guest window');
-    setOpenState(false);
-  }, [setOpenState]);
+    setOpen(false);
+  }, []);
 
   const handleSignOut = useCallback(() => {
     console.log('[ProfileMenu] Opening sign out dialog');
-    setOpenState(false);
+    setOpen(false);
     setSignOutOpen(true);
-  }, [setOpenState]);
+  }, []);
 
   if (!currentProfile) {
     return <div className="profile-menu" />;

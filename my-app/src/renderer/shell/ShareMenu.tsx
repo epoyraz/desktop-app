@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeDialog } from './QRCodeDialog';
+import { usePopupLayer } from './PopupLayerContext';
 
 interface ShareMenuProps {
   open: boolean;
@@ -41,6 +42,13 @@ export function ShareMenu({ open, onClose, anchorRect }: ShareMenuProps): React.
     }
   }, [open]);
 
+  usePopupLayer({
+    id: 'share-menu',
+    type: 'dropdown',
+    onDismiss: onClose,
+    isOpen: open,
+  });
+
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -48,14 +56,9 @@ export function ShareMenu({ open, onClose, anchorRect }: ShareMenuProps): React.
         onClose();
       }
     };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
     };
   }, [open, onClose]);
 

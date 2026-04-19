@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { usePopupLayer } from './PopupLayerContext';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -104,6 +105,14 @@ export function DevicePickerBar(): React.ReactElement | null {
     setRequests((prev) => prev.filter((r) => r.id !== current.id));
     setSelectedId('');
   }, [current]);
+
+  usePopupLayer({
+    id: 'device-picker-bar',
+    type: 'bar',
+    height: 200,
+    onDismiss: () => { handleCancel(); },
+    isOpen: requests.length > 0,
+  });
 
   if (!current) return null;
 

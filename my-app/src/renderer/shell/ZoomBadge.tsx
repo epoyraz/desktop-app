@@ -5,6 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { usePopupLayer } from './PopupLayerContext';
 
 interface ZoomBadgeProps {
   percent: number;
@@ -25,6 +26,13 @@ export function ZoomBadge({
 
   const toggle = useCallback(() => setOpen((v) => !v), []);
 
+  usePopupLayer({
+    id: 'zoom-popover',
+    type: 'dropdown',
+    onDismiss: () => setOpen(false),
+    isOpen: open,
+  });
+
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent): void => {
@@ -37,14 +45,9 @@ export function ZoomBadge({
         setOpen(false);
       }
     };
-    const handleKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
     };
   }, [open]);
 

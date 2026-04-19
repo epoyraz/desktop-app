@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { usePopupLayer } from './PopupLayerContext';
 
 interface PasswordPromptData {
   tabId: string;
@@ -86,6 +87,14 @@ export function PasswordPromptBar({ activeTabId }: PasswordPromptBarProps): Reac
   const handleDismiss = useCallback((prompt: PasswordPromptData) => {
     setPrompts((prev) => prev.filter((p) => p !== prompt));
   }, []);
+
+  usePopupLayer({
+    id: 'password-prompt-bar',
+    type: 'bar',
+    height: 48,
+    onDismiss: () => { if (current) handleDismiss(current); },
+    isOpen: visiblePrompts.length > 0,
+  });
 
   if (!current) return null;
 

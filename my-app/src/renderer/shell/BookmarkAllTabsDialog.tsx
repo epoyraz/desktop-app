@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, PersistedBookmarks } from '../../main/bookmarks/BookmarkStore';
+import { usePopupLayer } from './PopupLayerContext';
 
 declare const electronAPI: {
   bookmarks: {
@@ -49,6 +50,13 @@ export function BookmarkAllTabsDialog({
   const scrimRef = useRef<HTMLDivElement>(null);
   const folders = useMemo(() => flattenFolders(tree), [tree]);
 
+  usePopupLayer({
+    id: 'bookmark-all-tabs-dialog',
+    type: 'modal',
+    onDismiss: onClose,
+    isOpen: true,
+  });
+
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -67,14 +75,6 @@ export function BookmarkAllTabsDialog({
       cancelAnimationFrame(raf);
       cleanup();
     };
-  }, [onClose]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
   const handleSave = useCallback(async () => {

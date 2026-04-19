@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkNode, PersistedBookmarks } from '../../main/bookmarks/BookmarkStore';
+import { usePopupLayer } from './PopupLayerContext';
 
 declare const electronAPI: {
   bookmarks: {
@@ -65,6 +66,13 @@ export function BookmarkDialog({
   const scrimRef = useRef<HTMLDivElement>(null);
   const folders = useMemo(() => flattenFolders(tree), [tree]);
 
+  usePopupLayer({
+    id: 'bookmark-dialog',
+    type: 'modal',
+    onDismiss: onClose,
+    isOpen: true,
+  });
+
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -87,19 +95,6 @@ export function BookmarkDialog({
       cancelAnimationFrame(raf);
       cleanup();
     };
-  }, [onClose]);
-
-  // Esc closes. Enter saves. Both at the document level so the input doesn't
-  // need its own key handler.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
   const handleSave = useCallback(async () => {

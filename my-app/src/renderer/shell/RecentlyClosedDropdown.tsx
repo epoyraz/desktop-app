@@ -6,6 +6,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClosedTabRecord } from '../../main/tabs/TabManager';
+import { usePopupLayer } from './PopupLayerContext';
 
 const MAX_VISIBLE = 10;
 
@@ -36,7 +37,14 @@ export function RecentlyClosedDropdown({
 }: Props): React.ReactElement | null {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside-click or Escape.
+  usePopupLayer({
+    id: 'recently-closed',
+    type: 'dropdown',
+    onDismiss: onClose,
+    isOpen: open,
+  });
+
+  // Close on outside-click.
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
@@ -44,16 +52,11 @@ export function RecentlyClosedDropdown({
         onClose();
       }
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     // defer to next tick so the trigger click that opened us doesn't immediately close
     const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
-    document.addEventListener('keydown', onKey);
     return () => {
       clearTimeout(t);
       document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
 
