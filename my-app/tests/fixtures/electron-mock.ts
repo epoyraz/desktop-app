@@ -225,6 +225,54 @@ export const MenuItem = class {
   }
 };
 
+let webContentsIdCounter = 1;
+
+function createMockWebContents() {
+  const id = webContentsIdCounter++;
+  return {
+    id,
+    getURL: (): string => 'about:blank',
+    getTitle: (): string => 'New Tab',
+    getOSProcessId: (): number => 10000 + id,
+    setFrameRate: (_fps: number): void => undefined,
+    setBackgroundThrottling: (_throttle: boolean): void => undefined,
+    loadURL: (_url: string): Promise<void> => Promise.resolve(),
+    close: (): void => undefined,
+    on: (): void => undefined,
+    off: (): void => undefined,
+    once: (): void => undefined,
+    debugger: {
+      attach: (): void => undefined,
+      sendCommand: (): Promise<unknown> => Promise.resolve({}),
+      on: (): void => undefined,
+      isAttached: (): boolean => false,
+    },
+  };
+}
+
+export const WebContentsView = class {
+  webContents: ReturnType<typeof createMockWebContents>;
+  private _bounds = { x: 0, y: 0, width: 0, height: 0 };
+
+  constructor(_opts?: unknown) {
+    this.webContents = createMockWebContents();
+  }
+
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): void {
+    this._bounds = { ...bounds };
+  }
+
+  getBounds(): { x: number; y: number; width: number; height: number } {
+    return { ...this._bounds };
+  }
+};
+
+export const contentViewStub = {
+  addChildView: (_view: unknown): void => undefined,
+  removeChildView: (_view: unknown): void => undefined,
+  children: [] as unknown[],
+};
+
 export default {
   app,
   ipcMain,
@@ -240,4 +288,5 @@ export default {
   protocol,
   Menu,
   MenuItem,
+  WebContentsView,
 };
