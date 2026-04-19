@@ -1,4 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import {
+  validateSession,
+  validateSessionList,
+  validateHlEvent,
+  validateTabs,
+  validatePoolStats,
+} from '../shared/session-schemas';
+import type { AgentSession, HlEvent, TabInfo, BrowserPoolStats } from '../shared/session-schemas';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   shell: {
@@ -11,18 +19,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (prompt: string): Promise<string> => ipcRenderer.invoke('sessions:create', prompt),
     start: (id: string): Promise<void> => ipcRenderer.invoke('sessions:start', id),
     cancel: (id: string): Promise<void> => ipcRenderer.invoke('sessions:cancel', id),
-    list: (): Promise<unknown[]> => ipcRenderer.invoke('sessions:list'),
-    get: (id: string): Promise<unknown> => ipcRenderer.invoke('sessions:get', id),
+    list: async (): Promise<AgentSession[]> => {
+      const raw = await ipcRenderer.invoke('sessions:list');
+      return validateSessionList(raw);
+    },
+    get: async (id: string): Promise<AgentSession | null> => {
+      const raw = await ipcRenderer.invoke('sessions:get', id);
+      if (!raw) return null;
+      return validateSession(raw);
+    },
     viewAttach: (id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-attach', id, bounds),
     viewDetach: (id: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-detach', id),
     viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-resize', id, bounds),
-    getTabs: (id: string): Promise<unknown[]> =>
-      ipcRenderer.invoke('sessions:get-tabs', id),
-    poolStats: (): Promise<unknown> =>
-      ipcRenderer.invoke('sessions:pool-stats'),
+    getTabs: async (id: string): Promise<TabInfo[]> => {
+      const raw = await ipcRenderer.invoke('sessions:get-tabs', id);
+      return validateTabs(raw);
+    },
+    poolStats: async (): Promise<BrowserPoolStats> => {
+      const raw = await ipcRenderer.invoke('sessions:pool-stats');
+      return validatePoolStats(raw);
+    },
   },
   on: {
     windowReady: (cb: () => void): (() => void) => {
@@ -30,15 +49,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('window-ready', handler);
       return () => ipcRenderer.removeListener('window-ready', handler);
     },
-    sessionUpdated: (cb: (session: unknown) => void): (() => void) => {
-      const handler = (_event: unknown, session: unknown) => cb(session);
+    sessionUpdated: (cb: (session: AgentSession) => void): (() => void) => {
+      const handler = (_event: unknown, raw: unknown) => {
+        try {
+          cb(validateSession(raw));
+        } catch (err) {
+          console.error('[preload] sessionUpdated validation failed', err);
+        }
+      };
       ipcRenderer.on('session-updated', handler);
       return () => ipcRenderer.removeListener('session-updated', handler);
     },
-    sessionOutput: (cb: (id: string, line: string) => void): (() => void) => {
-      const handler = (_event: unknown, id: string, line: string) => cb(id, line);
+    sessionOutput: (cb: (id: string, event: HlEvent) => void): (() => void) => {
+      const handler = (_event: unknown, id: string, raw: unknown) => {
+        try {
+          cb(id, validateHlEvent(raw));
+        } catch (err) {
+          console.error('[preload] sessionOutput validation failed', err);
+        }
+      };
       ipcRenderer.on('session-output', handler);
       return () => ipcRenderer.removeListener('session-output', handler);
+    },
+    openSettings: (cb: () => void): (() => void) => {
+      const handler = () => cb();
+      ipcRenderer.on('open-settings', handler);
+      return () => ipcRenderer.removeListener('open-settings', handler);
     },
   },
 });

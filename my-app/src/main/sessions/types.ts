@@ -1,23 +1,25 @@
-import type { HlEvent } from '../hl/agent';
+export type {
+  SessionStatus,
+  AgentSession,
+  HlEvent,
+  TabInfo,
+  BrowserPoolStats,
+  OutputEntry,
+} from '../../shared/session-schemas';
 
-export type SessionStatus = 'draft' | 'running' | 'stuck' | 'stopped';
+export {
+  AgentSessionSchema,
+  HlEventSchema,
+  TabInfoSchema,
+  BrowserPoolStatsSchema,
+  validateSession,
+  validateSessionList,
+  validateHlEvent,
+  validateTabs,
+  validatePoolStats,
+} from '../../shared/session-schemas';
 
-export interface TabInfo {
-  targetId: string;
-  url: string;
-  title: string;
-  type: 'page' | 'iframe' | 'other';
-  active: boolean;
-}
-
-export interface AgentSession {
-  id: string;
-  prompt: string;
-  status: SessionStatus;
-  createdAt: number;
-  output: HlEvent[];
-  error?: string;
-}
+import type { AgentSession, HlEvent } from '../../shared/session-schemas';
 
 export interface SessionEvents {
   'session-created': (session: AgentSession) => void;
