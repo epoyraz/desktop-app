@@ -27,9 +27,9 @@ import type { AgentEvent } from '../shared/types';
 import { AccountStore } from './identity/AccountStore';
 import { OAuthClient } from './identity/OAuthClient';
 import { KeychainStore } from './identity/KeychainStore';
-import { initOAuthHandler } from './oauth';
 import { createOnboardingWindow } from './identity/onboardingWindow';
 import { registerOnboardingHandlers, unregisterOnboardingHandlers } from './identity/onboardingHandlers';
+import { registerChromeImportHandlers, unregisterChromeImportHandlers } from './chrome-import/ipc';
 import { performSignOut, turnOffSync } from './identity/SignOutController';
 import type { SignOutMode } from './identity/SignOutController';
 import { mainLogger } from './logger';
@@ -45,6 +45,8 @@ import { runAgent } from './hl/agent';
 import { createContext } from './hl/context';
 import { getEngine, setEngine, type EngineId } from './hl/engine';
 import { forwardAgentEvent } from './pill';
+// Session management
+import { SessionManager } from './sessions/SessionManager';
 // Settings window (no browser-feature IPC handlers)
 import { openSettingsWindow, closeSettingsWindow, getSettingsWindow } from './settings/SettingsWindow';
 // Auto-updater
@@ -103,6 +105,7 @@ if (started) {
 let shellWindow: BrowserWindow | null = null;
 let onboardingWindow: BrowserWindow | null = null;
 
+const sessionManager = new SessionManager();
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({
   clientId: process.env.GOOGLE_CLIENT_ID ?? '42357852543-62lvdghq5hatidr3ovmq1rig9q5r5mcg.apps.googleusercontent.com',
@@ -245,6 +248,88 @@ app.whenReady().then(async () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Session IPC handlers
+  // ---------------------------------------------------------------------------
+
+  sessionManager.onEvent('session-updated', (session) => {
+    shellWindow?.webContents.send('session-updated', session);
+  });
+  sessionManager.onEvent('session-completed', (session) => {
+    shellWindow?.webContents.send('session-updated', session);
+  });
+  sessionManager.onEvent('session-error', (session) => {
+    shellWindow?.webContents.send('session-updated', session);
+  });
+  sessionManager.onEvent('session-output', (id, line) => {
+    shellWindow?.webContents.send('session-output', id, line);
+  });
+
+  ipcMain.handle('sessions:create', (_event, prompt: string) => {
+    const validatedPrompt = assertString(prompt, 'prompt', 10000);
+    mainLogger.info('main.sessions:create', { promptLength: validatedPrompt.length });
+    return sessionManager.createSession(validatedPrompt);
+  });
+
+  ipcMain.handle('sessions:start', async (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    mainLogger.info('main.sessions:start', { id: validatedId });
+
+    const abortController = sessionManager.startSession(validatedId);
+
+    const apiKey = await getApiKey({ accountEmail: accountStore.load()?.email });
+    if (!apiKey) {
+      sessionManager.failSession(validatedId, 'No API key configured');
+      mainLogger.warn('main.sessions:start.noApiKey', { id: validatedId });
+      return;
+    }
+
+    let ctx;
+    try {
+      ctx = await createContext({ cdpUrl: null });
+    } catch (err) {
+      const msg = `CDP context creation failed: ${(err as Error).message}`;
+      mainLogger.warn('main.sessions:start.noCdp', { id: validatedId, error: msg });
+      sessionManager.failSession(validatedId, msg);
+      return;
+    }
+
+    runAgent({
+      ctx,
+      prompt: sessionManager.getSession(validatedId)!.prompt,
+      apiKey,
+      signal: abortController.signal,
+      onEvent: (event) => {
+        if (event.type === 'done') {
+          sessionManager.appendOutput(validatedId, event);
+          sessionManager.completeSession(validatedId);
+        } else if (event.type === 'error') {
+          sessionManager.failSession(validatedId, event.message);
+        } else {
+          sessionManager.appendOutput(validatedId, event);
+        }
+      },
+    }).catch((err: Error) => {
+      mainLogger.error('main.sessions:start.agentError', { id: validatedId, error: err.message });
+      sessionManager.failSession(validatedId, err.message);
+    });
+  });
+
+  ipcMain.handle('sessions:cancel', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    mainLogger.info('main.sessions:cancel', { id: validatedId });
+    sessionManager.cancelSession(validatedId);
+  });
+
+  ipcMain.handle('sessions:list', () => {
+    return sessionManager.listSessions();
+  });
+
+  ipcMain.handle('sessions:get', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    return sessionManager.getSession(validatedId) ?? null;
+  });
+
+  // ---------------------------------------------------------------------------
   // Shell layout IPC (retained for shell renderer compatibility)
   // ---------------------------------------------------------------------------
   ipcMain.handle('shell:set-chrome-height', (_e, height: unknown) => {
@@ -311,23 +396,17 @@ app.whenReady().then(async () => {
     mainLogger.info('main.onboardingGate.fresh', { msg: 'Opening onboarding window' });
     onboardingWindow = createOnboardingWindow();
 
+    registerChromeImportHandlers();
     registerOnboardingHandlers({
       accountStore,
-      oauthClient,
       onboardingWindow,
       openShellWindow: () => openShellAndWire(),
-    });
-
-    initOAuthHandler({
-      client: oauthClient,
-      keychain: keychainStore,
-      account: accountStore,
-      window: onboardingWindow,
     });
 
     onboardingWindow.on('closed', () => {
       mainLogger.info('main.onboardingWindow.closed');
       unregisterOnboardingHandlers();
+      unregisterChromeImportHandlers();
       onboardingWindow = null;
     });
   } else {
@@ -352,6 +431,7 @@ app.whenReady().then(async () => {
       ctrl.abort();
     }
     activeAgents.clear();
+    sessionManager.destroy();
   });
 
   app.on('will-quit', () => {
