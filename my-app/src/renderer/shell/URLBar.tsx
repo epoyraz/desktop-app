@@ -14,6 +14,8 @@ import { usePopupLayer } from './PopupLayerContext';
 import type { OmniboxSuggestion } from '../../main/omnibox/providers';
 import { decode as punyDecode, toASCII } from 'punycode';
 
+const GOOGLE_FAVICON_API = 'https://www.google.com/s2/favicons?sz=32&domain_url=';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
