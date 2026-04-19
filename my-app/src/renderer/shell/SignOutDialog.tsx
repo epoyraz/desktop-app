@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { usePopupLayer } from './PopupLayerContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +43,14 @@ export function SignOutDialog({ open, onClose }: SignOutDialogProps): React.Reac
   const [email, setEmail] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  usePopupLayer({
+    id: 'sign-out-dialog',
+    type: 'modal',
+    onDismiss: onClose,
+    escDismiss: !busy,
+    isOpen: open,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -105,12 +114,6 @@ export function SignOutDialog({ open, onClose }: SignOutDialogProps): React.Reac
     }
   }, [onClose]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !busy) {
-      onClose();
-    }
-  }, [busy, onClose]);
-
   if (!open) return null;
 
   return (
@@ -120,7 +123,6 @@ export function SignOutDialog({ open, onClose }: SignOutDialogProps): React.Reac
       onClick={(e) => {
         if (!busy && e.target === e.currentTarget) onClose();
       }}
-      onKeyDown={handleKeyDown}
     >
       <div
         className="sod-panel"
