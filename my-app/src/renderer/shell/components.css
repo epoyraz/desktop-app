@@ -90,7 +90,7 @@
 
 .tab-strip__tabs {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   /* Shrink-to-fit: tabs compress rather than overflow into a scrollable region */
   flex: 1;
   height: 100%;
