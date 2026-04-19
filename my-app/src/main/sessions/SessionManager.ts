@@ -2,35 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { mainLogger } from '../logger';
 import type { HlEvent } from '../hl/agent';
+import type { AgentSession, SessionStatus, SessionEvents } from './types';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+export type { AgentSession, SessionStatus, SessionEvents };
 
 const STUCK_TIMEOUT_MS = 30_000;
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type SessionStatus = 'draft' | 'running' | 'stuck' | 'stopped';
-
-export interface AgentSession {
-  id: string;
-  prompt: string;
-  status: SessionStatus;
-  createdAt: number;
-  output: HlEvent[];
-  error?: string;
-}
-
-export interface SessionEvents {
-  'session-created': (session: AgentSession) => void;
-  'session-updated': (session: AgentSession) => void;
-  'session-completed': (session: AgentSession) => void;
-  'session-error': (session: AgentSession) => void;
-  'session-output': (id: string, event: HlEvent) => void;
-}
 
 // ---------------------------------------------------------------------------
 // SessionManager
