@@ -51,31 +51,43 @@ export interface GetApiKeyOptions {
  * The key value is NEVER logged. Only metadata (source, length) is logged.
  */
 export async function getApiKey(opts: GetApiKeyOptions = {}): Promise<string | null> {
-  const { keytarModule, accountEmail } = opts;
+  const { accountEmail } = opts;
+  let keytarMod = opts.keytarModule;
 
-  // Source 1: Keychain via keytar
-  if (keytarModule && accountEmail) {
+  if (!keytarMod) {
     try {
-      const key = await keytarModule.getPassword(API_KEY_KEYCHAIN_SERVICE, accountEmail);
-      if (key) {
-        mainLogger.info('agentApiKey.getApiKey', {
-          source: 'keytar',
-          keyLength: key.length,
-          account: accountEmail,
-        });
-        return key;
-      }
-      mainLogger.debug('agentApiKey.getApiKey', {
-        source: 'keytar',
-        result: 'not_found',
-        account: accountEmail,
-      });
-    } catch (err) {
-      mainLogger.warn('agentApiKey.getApiKey.keytarError', {
-        error: (err as Error).message,
-        account: accountEmail,
-      });
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      keytarMod = require('keytar') as KeytarLike;
+    } catch {
+      mainLogger.debug('agentApiKey.getApiKey.keytarUnavailable');
     }
+  }
+
+  // Source 1: Keychain via keytar (try account email, then 'default')
+  if (keytarMod) {
+    const accounts = accountEmail ? [accountEmail, 'default'] : ['default'];
+    for (const account of accounts) {
+      try {
+        const key = await keytarMod.getPassword(API_KEY_KEYCHAIN_SERVICE, account);
+        if (key) {
+          mainLogger.info('agentApiKey.getApiKey', {
+            source: 'keytar',
+            keyLength: key.length,
+            account,
+          });
+          return key;
+        }
+      } catch (err) {
+        mainLogger.warn('agentApiKey.getApiKey.keytarError', {
+          error: (err as Error).message,
+          account,
+        });
+      }
+    }
+    mainLogger.debug('agentApiKey.getApiKey', {
+      source: 'keytar',
+      result: 'not_found',
+    });
   }
 
   // Source 2: Environment variable

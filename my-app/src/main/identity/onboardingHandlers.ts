@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, globalShortcut } from 'electron';
 import { mainLogger } from '../logger';
 import { AccountStore } from './AccountStore';
 import { assertString } from '../ipc-validators';
+import { createPillWindow, togglePill } from '../pill';
 
 const GLOBAL_SHORTCUT = 'CommandOrControl+Shift+Space';
 
@@ -98,15 +99,24 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
     }
   });
 
+  let pillCreated = false;
+
   ipcMain.handle('onboarding:listen-shortcut', () => {
     mainLogger.info('onboardingHandlers.listenShortcut');
+
+    if (!pillCreated) {
+      createPillWindow();
+      pillCreated = true;
+      mainLogger.info('onboardingHandlers.pillCreated');
+    }
+
     globalShortcut.unregister(GLOBAL_SHORTCUT);
     const ok = globalShortcut.register(GLOBAL_SHORTCUT, () => {
       mainLogger.info('onboardingHandlers.shortcutFired');
+      togglePill();
       if (!onboardingWindow.isDestroyed()) {
         onboardingWindow.webContents.send('shortcut-activated');
       }
-      globalShortcut.unregister(GLOBAL_SHORTCUT);
     });
     mainLogger.info('onboardingHandlers.listenShortcut.registered', { ok });
     return { ok };
