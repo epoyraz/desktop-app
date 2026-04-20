@@ -87,8 +87,13 @@ export function Pill(): React.ReactElement {
   const submit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (hasResults && selectedIdx < results.length) {
-      window.pillAPI.selectSession(results[selectedIdx].id);
+    if (hasResults && selectedIdx === 0) {
+      window.pillAPI.submit(trimmed);
+      setValue('');
+      return;
+    }
+    if (hasResults && selectedIdx > 0 && selectedIdx <= results.length) {
+      window.pillAPI.selectSession(results[selectedIdx - 1].id);
       setValue('');
       return;
     }
@@ -145,12 +150,21 @@ export function Pill(): React.ReactElement {
 
         {hasResults && (
           <div className="cmdbar__results">
+            <button
+              className={`cmdbar__result cmdbar__result--create${selectedIdx === 0 ? ' cmdbar__result--active' : ''}`}
+              onClick={submit}
+              onMouseEnter={() => setSelectedIdx(0)}
+            >
+              <span className="cmdbar__result-create-icon">+</span>
+              <span className="cmdbar__result-prompt">New agent: &ldquo;{value}&rdquo;</span>
+              <kbd className="cmdbar__result-kbd">{'\u2318\u21B5'}</kbd>
+            </button>
             {results.map((s, i) => (
               <button
                 key={s.id}
-                className={`cmdbar__result${i === selectedIdx ? ' cmdbar__result--active' : ''}`}
+                className={`cmdbar__result${i + 1 === selectedIdx ? ' cmdbar__result--active' : ''}`}
                 onClick={() => { window.pillAPI.selectSession(s.id); setValue(''); }}
-                onMouseEnter={() => setSelectedIdx(i)}
+                onMouseEnter={() => setSelectedIdx(i + 1)}
               >
                 <span className={`cmdbar__dot ${statusDot(s.status)}`} />
                 <span className="cmdbar__result-prompt">{s.prompt}</span>
@@ -158,14 +172,6 @@ export function Pill(): React.ReactElement {
                 <span className="cmdbar__result-status">{s.status}</span>
               </button>
             ))}
-            <button
-              className={`cmdbar__result cmdbar__result--create${selectedIdx === results.length ? ' cmdbar__result--active' : ''}`}
-              onClick={submit}
-              onMouseEnter={() => setSelectedIdx(results.length)}
-            >
-              <span className="cmdbar__result-create-icon">+</span>
-              <span className="cmdbar__result-prompt">Create new agent: &ldquo;{value}&rdquo;</span>
-            </button>
           </div>
         )}
 
