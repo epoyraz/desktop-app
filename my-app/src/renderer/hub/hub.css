@@ -1503,8 +1503,9 @@
 }
 
 .cmdbar__result--create {
-  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-fg-tertiary);
+  background-color: var(--color-bg-elevated);
 }
 
 .cmdbar__result-create-icon {
@@ -1513,6 +1514,16 @@
   color: var(--color-fg-disabled);
   width: 6px;
   text-align: center;
+}
+
+.cmdbar__result-kbd {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-fg-disabled);
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
 }
 
 .cmdbar__footer {
@@ -2427,6 +2438,79 @@
   gap: var(--space-2);
 }
 
+.settings-pane__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings-pane__section-title {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: var(--space-2);
+}
+
+.settings-pane__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.settings-pane__row:last-child {
+  border-bottom: none;
+}
+
+.settings-pane__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-secondary);
+}
+
+.settings-pane__keys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-pane__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-fg-primary);
+  line-height: 1;
+}
+
+.settings-pane__modified {
+  font-size: var(--font-size-2xs);
+  color: var(--color-accent-default);
+  margin-left: var(--space-2);
+}
+
+.settings-pane__reset {
+  align-self: flex-start;
+  font-size: var(--font-size-xs);
+  color: var(--color-status-error);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-2) 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.settings-pane__reset:hover {
+  opacity: 0.8;
+}
+
 /* ---------------------------------------------------------------------------
    CONNECTIONS PANE — channel integration cards
 --------------------------------------------------------------------------- */
@@ -2465,13 +2549,26 @@
 .conn-card__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-4);
 }
 
-.conn-card__service {
+.conn-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.conn-card__title-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+.conn-card__subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-tertiary);
 }
 
 .conn-card__dot {
@@ -2497,6 +2594,13 @@
 
 .conn-card__dot--disconnected {
   background-color: var(--color-fg-disabled);
+}
+
+.conn-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
 
 .conn-card__name {

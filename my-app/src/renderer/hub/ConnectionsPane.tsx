@@ -85,11 +85,44 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
 
       <div className="conn-card">
         <div className="conn-card__header">
-          <div className="conn-card__service">
-            <span className={`conn-card__dot ${statusDotClass}`} />
-            <span className="conn-card__name">WhatsApp</span>
+          <img
+            className="conn-card__icon"
+            src="https://static.whatsapp.net/rsrc.php/v3/yP/r/rYZqPCBaG70.png"
+            alt=""
+          />
+          <div className="conn-card__info">
+            <div className="conn-card__title-row">
+              <span className="conn-card__name">WhatsApp</span>
+              <span className={`conn-card__dot ${statusDotClass}`} />
+            </div>
+            <span className="conn-card__subtitle">
+              {waStatus === 'connected' && waIdentity
+                ? `+${waIdentity.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4')}`
+                : statusText}
+            </span>
           </div>
-          <span className="conn-card__status-text">{statusText}</span>
+          <div className="conn-card__actions">
+            {waStatus === 'disconnected' && (
+              <button className="conn-card__btn conn-card__btn--primary" onClick={handleConnect}>
+                Connect
+              </button>
+            )}
+            {(waStatus === 'qr_ready' || waStatus === 'connecting') && (
+              <button className="conn-card__btn conn-card__btn--secondary" onClick={handleCancel}>
+                Cancel
+              </button>
+            )}
+            {waStatus === 'connected' && (
+              <button className="conn-card__btn conn-card__btn--secondary" onClick={handleDisconnect}>
+                Disconnect
+              </button>
+            )}
+            {waStatus === 'error' && (
+              <button className="conn-card__btn conn-card__btn--primary" onClick={handleConnect}>
+                Reconnect
+              </button>
+            )}
+          </div>
         </div>
 
         {(waStatus === 'qr_ready' || qrDataUrl) && (
@@ -108,29 +141,6 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
             </p>
           </div>
         )}
-
-        <div className="conn-card__actions">
-          {waStatus === 'disconnected' && (
-            <button className="conn-card__btn conn-card__btn--primary" onClick={handleConnect}>
-              Connect
-            </button>
-          )}
-          {(waStatus === 'qr_ready' || waStatus === 'connecting') && (
-            <button className="conn-card__btn conn-card__btn--secondary" onClick={handleCancel}>
-              Cancel
-            </button>
-          )}
-          {waStatus === 'connected' && (
-            <button className="conn-card__btn conn-card__btn--secondary" onClick={handleDisconnect}>
-              Disconnect
-            </button>
-          )}
-          {waStatus === 'error' && (
-            <button className="conn-card__btn conn-card__btn--primary" onClick={handleConnect}>
-              Reconnect
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
