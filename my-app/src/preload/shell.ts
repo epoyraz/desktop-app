@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (prompt: string): Promise<string> => ipcRenderer.invoke('sessions:create', prompt),
     start: (id: string): Promise<void> => ipcRenderer.invoke('sessions:start', id),
     cancel: (id: string): Promise<void> => ipcRenderer.invoke('sessions:cancel', id),
+    dismiss: (id: string): Promise<void> => ipcRenderer.invoke('sessions:dismiss', id),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('sessions:delete', id),
+    resume: (id: string, prompt: string): Promise<{ resumed?: boolean; error?: string }> =>
+      ipcRenderer.invoke('sessions:resume', { id, prompt }),
     list: async (): Promise<AgentSession[]> => {
       const raw = await ipcRenderer.invoke('sessions:list');
       return validateSessionList(raw);
@@ -34,6 +38,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('sessions:view-detach', id),
     viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-resize', id, bounds),
+    viewIsAttached: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke('sessions:view-is-attached', id),
     getTabs: async (id: string): Promise<TabInfo[]> => {
       const raw = await ipcRenderer.invoke('sessions:get-tabs', id);
       return validateTabs(raw);

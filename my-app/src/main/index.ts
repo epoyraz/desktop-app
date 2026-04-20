@@ -106,7 +106,7 @@ if (started) {
 let shellWindow: BrowserWindow | null = null;
 let onboardingWindow: BrowserWindow | null = null;
 
-const sessionManager = new SessionManager();
+const sessionManager = new SessionManager(path.join(app.getPath('userData'), 'sessions.db'));
 const browserPool = new BrowserPool();
 const accountStore = new AccountStore();
 const oauthClient = new OAuthClient({
@@ -284,7 +284,7 @@ app.whenReady().then(async () => {
 
     let ctx;
     try {
-      ctx = await createContext({ webContents: view.webContents });
+      ctx = await createContext({ name: validatedId, webContents: view.webContents });
       mainLogger.info('main.sessions:start.cdpAttached', { id: validatedId, transport: ctx.cdp.transport });
     } catch (err) {
       const msg = `CDP context creation failed: ${(err as Error).message}`;
@@ -313,9 +313,63 @@ app.whenReady().then(async () => {
       mainLogger.error('main.sessions:start.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
     }).finally(() => {
-      browserPool.destroy(validatedId, shellWindow ?? undefined);
-      mainLogger.info('main.sessions:start.browserCleaned', { id: validatedId, poolStats: browserPool.getStats() });
+      mainLogger.info('main.sessions:start.agentFinished', { id: validatedId, poolStats: browserPool.getStats() });
     });
+  });
+
+  ipcMain.handle('sessions:resume', async (_event, { id, prompt }: { id: string; prompt: string }) => {
+    const validatedId = assertString(id, 'id', 100);
+    const validatedPrompt = assertString(prompt, 'prompt', 10000);
+    mainLogger.info('main.sessions:resume', { id: validatedId, promptLength: validatedPrompt.length });
+
+    const apiKey = await getApiKey({ accountEmail: accountStore.load()?.email });
+    if (!apiKey) {
+      mainLogger.warn('main.sessions:resume.noApiKey', { id: validatedId });
+      return { error: 'No API key configured' };
+    }
+
+    const webContents = browserPool.getWebContents(validatedId);
+    if (!webContents) {
+      mainLogger.warn('main.sessions:resume.noBrowser', { id: validatedId });
+      return { error: 'Browser session expired — start a new session' };
+    }
+
+    const abortController = sessionManager.resumeSession(validatedId, validatedPrompt);
+
+    let ctx;
+    try {
+      ctx = await createContext({ name: validatedId, webContents });
+      mainLogger.info('main.sessions:resume.cdpAttached', { id: validatedId, transport: ctx.cdp.transport });
+    } catch (err) {
+      const msg = `CDP context creation failed: ${(err as Error).message}`;
+      mainLogger.warn('main.sessions:resume.noCdp', { id: validatedId, error: msg });
+      sessionManager.failSession(validatedId, msg);
+      return { error: msg };
+    }
+
+    runAgent({
+      ctx,
+      prompt: validatedPrompt,
+      apiKey,
+      signal: abortController.signal,
+      onEvent: (event) => {
+        if (event.type === 'done') {
+          sessionManager.appendOutput(validatedId, event);
+          sessionManager.completeSession(validatedId);
+        } else if (event.type === 'error') {
+          sessionManager.failSession(validatedId, event.message);
+        } else {
+          sessionManager.appendOutput(validatedId, event);
+        }
+      },
+    }).catch((err: Error) => {
+      mainLogger.error('main.sessions:resume.agentError', { id: validatedId, error: err.message });
+      sessionManager.failSession(validatedId, err.message);
+    }).finally(() => {
+      mainLogger.info('main.sessions:resume.agentFinished', { id: validatedId, poolStats: browserPool.getStats() });
+    });
+
+    return { resumed: true };
   });
 
   ipcMain.handle('sessions:cancel', (_event, id: string) => {
@@ -325,13 +379,32 @@ app.whenReady().then(async () => {
     browserPool.destroy(validatedId, shellWindow ?? undefined);
   });
 
+  ipcMain.handle('sessions:dismiss', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    mainLogger.info('main.sessions:dismiss', { id: validatedId });
+    sessionManager.dismissSession(validatedId);
+    browserPool.destroy(validatedId, shellWindow ?? undefined);
+  });
+
+  ipcMain.handle('sessions:delete', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    mainLogger.info('main.sessions:delete', { id: validatedId });
+    browserPool.destroy(validatedId, shellWindow ?? undefined);
+    sessionManager.deleteSession(validatedId);
+  });
+
   ipcMain.handle('sessions:list', () => {
-    return sessionManager.listSessions();
+    return sessionManager.listSessions().map((s) => ({
+      ...s,
+      hasBrowser: !!browserPool.getWebContents(s.id),
+    }));
   });
 
   ipcMain.handle('sessions:get', (_event, id: string) => {
     const validatedId = assertString(id, 'id', 100);
-    return sessionManager.getSession(validatedId) ?? null;
+    const session = sessionManager.getSession(validatedId);
+    if (!session) return null;
+    return { ...session, hasBrowser: !!browserPool.getWebContents(validatedId) };
   });
 
   // Live view: attach/detach agent browser to shell window
@@ -353,6 +426,11 @@ app.whenReady().then(async () => {
     const validatedId = assertString(id, 'id', 100);
     if (!shellWindow) return false;
     return browserPool.attachToWindow(validatedId, shellWindow, bounds);
+  });
+
+  ipcMain.handle('sessions:view-is-attached', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    return browserPool.isAttached(validatedId);
   });
 
   ipcMain.handle('sessions:get-tabs', async (_event, id: string) => {

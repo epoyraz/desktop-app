@@ -227,6 +227,11 @@ export class BrowserPool {
     this.queue.length = 0;
   }
 
+  isAttached(sessionId: string): boolean {
+    const entry = this.entries.get(sessionId);
+    return entry?.attached ?? false;
+  }
+
   getStats(): {
     active: number;
     queued: number;
