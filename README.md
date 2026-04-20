@@ -1,8 +1,12 @@
-# Agent Hub
+# Browser Use Desktop
 
-A desktop app for running AI browser automation agents. Each agent gets its own sandboxed WebContentsView so multiple agents can work side-by-side without interfering with each other.
+<img width="1456" height="484" alt="desktop-app-banner" src="https://github.com/user-attachments/assets/550ca16a-5a61-4ded-92f0-a30421870223" />
 
-Built on Electron because browser automation agents need a real Chromium environment, not headless.
+## A desktop app for running browser agents. 
+
+Running automations on your local Chrome interferes with your daily work and also requires permissions every time. Instead, you can port your cookies into a new Chromium environment and run tasks there. 
+
+With a separate desktop app, you can also run agents from anywhere - WhatsApp, Slack, keyboard shortcut, etc.
 
 ## How it works
 
