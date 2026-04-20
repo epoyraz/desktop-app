@@ -135,8 +135,8 @@ var LoggerFactory = class {
   constructor(userDataPath) {
     const base = userDataPath ?? (() => {
       try {
-        const { app } = require("electron");
-        return app.getPath("userData");
+        const { app: app2 } = require("electron");
+        return app2.getPath("userData");
       } catch {
         return import_node_path.default.join(import_node_os.default.tmpdir(), "AgenticBrowser");
       }
@@ -338,6 +338,13 @@ var import_sdk = __toESM(require("@anthropic-ai/sdk"));
 
 // ../../src/main/hl/helpers.ts
 var import_promises = __toESM(require("node:fs/promises"));
+var import_node_path2 = __toESM(require("node:path"));
+var import_electron = require("electron");
+var import_node_child_process = require("node:child_process");
+var import_node_util = require("node:util");
+function skillsRoot() {
+  return import_node_path2.default.resolve(import_electron.app.isPackaged ? process.resourcesPath : import_node_path2.default.join(__dirname, "../../.."));
+}
 async function cdp(ctx, method, params = {}, sessionId) {
   const sid = method.startsWith("Target.") ? null : sessionId !== void 0 ? sessionId : ctx.session;
   return ctx.cdp.send(method, params, sid ?? null);
@@ -351,9 +358,25 @@ function setSession(ctx, s) {
   ctx.session = s;
 }
 async function goto(ctx, url) {
-  return cdp(ctx, "Page.navigate", { url });
+  const r = await cdp(ctx, "Page.navigate", { url });
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "").split(".")[0];
+    const skillDir = import_node_path2.default.join(skillsRoot(), "domain-skills", hostname);
+    const stat = await import_promises.default.stat(skillDir).catch(() => null);
+    if (stat?.isDirectory()) {
+      const files = await import_promises.default.readdir(skillDir);
+      const skills = files.filter((f) => f.endsWith(".md")).slice(0, 10);
+      return { ...r, domain_skills: skills };
+    }
+  } catch {
+  }
+  return r;
 }
 async function pageInfo(ctx) {
+  const pendingDialog = ctx.events.find((e) => e.method === "Page.javascriptDialogOpening");
+  if (pendingDialog) {
+    return { dialog: pendingDialog.params };
+  }
   const expr = "JSON.stringify({url:location.href,title:document.title,w:innerWidth,h:innerHeight,sx:scrollX,sy:scrollY,pw:document.documentElement.scrollWidth,ph:document.documentElement.scrollHeight})";
   const r = await cdp(ctx, "Runtime.evaluate", { expression: expr, returnByValue: true });
   return JSON.parse(r.result.value);
@@ -399,7 +422,11 @@ async function screenshot(ctx, outPath, full = false) {
   }
   return { data: r.data };
 }
+function isWebContents(ctx) {
+  return ctx.cdp.transport === "webcontents";
+}
 async function listTabs(ctx, includeChrome = false) {
+  if (isWebContents(ctx)) return [{ targetId: "webcontents", title: "active", url: "webcontents" }];
   const r = await cdp(ctx, "Target.getTargets");
   const out = [];
   for (const t of r.targetInfos) {
@@ -411,21 +438,44 @@ async function listTabs(ctx, includeChrome = false) {
   return out;
 }
 async function currentTab(ctx) {
+  if (isWebContents(ctx)) return { targetId: "webcontents", title: "active", url: "webcontents" };
   const r = await cdp(ctx, "Target.getTargetInfo");
   const t = r.targetInfo ?? { targetId: "", url: "", title: "" };
   return { targetId: t.targetId ?? "", title: t.title ?? "", url: t.url ?? "" };
 }
 async function switchTab(ctx, targetId) {
+  if (isWebContents(ctx)) return "webcontents";
+  try {
+    await cdp(ctx, "Runtime.evaluate", { expression: "if(document.title.startsWith('\\u{1F7E2} '))document.title=document.title.slice(2)" });
+  } catch {
+  }
+  try {
+    await Promise.race([
+      cdp(ctx, "Target.activateTarget", { targetId }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("activateTarget timeout")), 2e3))
+    ]);
+  } catch {
+  }
   const r = await cdp(ctx, "Target.attachToTarget", { targetId, flatten: true });
   setSession(ctx, r.sessionId);
+  try {
+    await cdp(ctx, "Runtime.evaluate", { expression: "if(!document.title.startsWith('\\u{1F7E2}'))document.title='\\u{1F7E2} '+document.title" });
+  } catch {
+  }
   return r.sessionId;
 }
 async function newTab(ctx, url = "about:blank") {
-  const r = await cdp(ctx, "Target.createTarget", { url });
+  if (isWebContents(ctx)) {
+    if (url !== "about:blank") await goto(ctx, url);
+    return "webcontents";
+  }
+  const r = await cdp(ctx, "Target.createTarget", { url: "about:blank" });
   await switchTab(ctx, r.targetId);
+  if (url !== "about:blank") await goto(ctx, url);
   return r.targetId;
 }
 async function ensureRealTab(ctx) {
+  if (isWebContents(ctx)) return { targetId: "webcontents", title: "active", url: "webcontents" };
   const tabs = await listTabs(ctx);
   if (tabs.length === 0) return null;
   try {
@@ -437,6 +487,7 @@ async function ensureRealTab(ctx) {
   return tabs[0];
 }
 async function iframeTarget(ctx, urlSubstr) {
+  if (isWebContents(ctx)) return null;
   const r = await cdp(ctx, "Target.getTargets");
   const t = r.targetInfos.find((i) => i.type === "iframe" && (i.url ?? "").includes(urlSubstr));
   return t ? t.targetId : null;
@@ -509,6 +560,56 @@ async function reactSetValue(ctx, selector, value) {
   const sel = JSON.stringify(selector);
   const v = JSON.stringify(value);
   await js(ctx, `(()=>{const el=document.querySelector(${sel});if(!el)throw new Error('no element for '+${sel});const d=Object.getOwnPropertyDescriptor(el.__proto__,'value');if(d&&d.set){d.set.call(el,${v});}else{el.value=${v};}el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+}
+var execAsync = (0, import_node_util.promisify)(import_node_child_process.exec);
+var MAX_READ_BYTES = 256 * 1024;
+var MAX_EXEC_TIMEOUT = 3e4;
+var MAX_OUTPUT_CHARS = 64e3;
+async function readFile(_ctx, filePath) {
+  const resolved = import_node_path2.default.resolve(filePath);
+  const stat = await import_promises.default.stat(resolved);
+  if (stat.size > MAX_READ_BYTES) {
+    const buf = Buffer.alloc(MAX_READ_BYTES);
+    const fh = await import_promises.default.open(resolved, "r");
+    await fh.read(buf, 0, MAX_READ_BYTES, 0);
+    await fh.close();
+    return { path: resolved, content: buf.toString("utf-8") + `
+\u2026[truncated at ${MAX_READ_BYTES} bytes, total ${stat.size}]`, size: stat.size };
+  }
+  const content = await import_promises.default.readFile(resolved, "utf-8");
+  return { path: resolved, content, size: stat.size };
+}
+async function writeFile(_ctx, filePath, content) {
+  const resolved = import_node_path2.default.resolve(filePath);
+  await import_promises.default.mkdir(import_node_path2.default.dirname(resolved), { recursive: true });
+  await import_promises.default.writeFile(resolved, content, "utf-8");
+  return { path: resolved, bytes: Buffer.byteLength(content, "utf-8") };
+}
+async function listDir(_ctx, dirPath) {
+  const resolved = import_node_path2.default.resolve(dirPath);
+  const entries = await import_promises.default.readdir(resolved, { withFileTypes: true });
+  return {
+    path: resolved,
+    entries: entries.map((e) => ({ name: e.name, type: e.isDirectory() ? "dir" : e.isFile() ? "file" : e.isSymbolicLink() ? "symlink" : "other" }))
+  };
+}
+async function shellExec(_ctx, command, cwd) {
+  const opts = { timeout: MAX_EXEC_TIMEOUT, maxBuffer: 10 * 1024 * 1024, cwd: cwd ? import_node_path2.default.resolve(cwd) : void 0 };
+  try {
+    const { stdout, stderr } = await execAsync(command, opts);
+    const out = stdout.length > MAX_OUTPUT_CHARS ? stdout.slice(0, MAX_OUTPUT_CHARS) + "\n\u2026[truncated]" : stdout;
+    const err = stderr.length > MAX_OUTPUT_CHARS ? stderr.slice(0, MAX_OUTPUT_CHARS) + "\n\u2026[truncated]" : stderr;
+    return { exitCode: 0, stdout: out, stderr: err };
+  } catch (e) {
+    return { exitCode: e.code ?? 1, stdout: (e.stdout ?? "").slice(0, MAX_OUTPUT_CHARS), stderr: (e.stderr ?? e.message ?? "").slice(0, MAX_OUTPUT_CHARS) };
+  }
+}
+async function patchFile(_ctx, filePath, oldStr, newStr) {
+  const resolved = import_node_path2.default.resolve(filePath);
+  const content = await import_promises.default.readFile(resolved, "utf-8");
+  if (!content.includes(oldStr)) return { path: resolved, replaced: false };
+  await import_promises.default.writeFile(resolved, content.replace(oldStr, newStr), "utf-8");
+  return { path: resolved, replaced: true };
 }
 
 // ../../src/main/hl/tools.ts
@@ -713,6 +814,49 @@ var HL_TOOLS = [
     },
     run: (ctx, a) => cdp(ctx, str(a, "method"), a.params ?? {})
   },
+  // ── Filesystem + Shell tools ──────────────────────────────────────────────
+  {
+    name: "read_file",
+    description: "Read a file from the local filesystem. Returns {path, content, size}. Large files are truncated at 256 KB.",
+    input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+    run: (ctx, a) => readFile(ctx, str(a, "path"))
+  },
+  {
+    name: "write_file",
+    description: "Write content to a file (creates parent dirs if needed). Returns {path, bytes}.",
+    input_schema: {
+      type: "object",
+      properties: { path: { type: "string" }, content: { type: "string" } },
+      required: ["path", "content"]
+    },
+    run: (ctx, a) => writeFile(ctx, str(a, "path"), str(a, "content"))
+  },
+  {
+    name: "patch_file",
+    description: "Replace the first occurrence of old_str with new_str in a file. Returns {path, replaced: bool}.",
+    input_schema: {
+      type: "object",
+      properties: { path: { type: "string" }, old_str: { type: "string" }, new_str: { type: "string" } },
+      required: ["path", "old_str", "new_str"]
+    },
+    run: (ctx, a) => patchFile(ctx, str(a, "path"), str(a, "old_str"), str(a, "new_str"))
+  },
+  {
+    name: "list_dir",
+    description: "List directory entries. Returns {path, entries: [{name, type}]}.",
+    input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+    run: (ctx, a) => listDir(ctx, str(a, "path"))
+  },
+  {
+    name: "shell",
+    description: "Execute a shell command. Returns {exitCode, stdout, stderr}. Timeout: 30s. Optional cwd.",
+    input_schema: {
+      type: "object",
+      properties: { command: { type: "string" }, cwd: { type: "string" } },
+      required: ["command"]
+    },
+    run: (ctx, a) => shellExec(ctx, str(a, "command"), a.cwd)
+  },
   {
     name: "done",
     description: "Call this when the task is complete. Pass a short user-facing summary of the outcome.",
@@ -723,22 +867,61 @@ var HL_TOOLS = [
 var HL_TOOL_BY_NAME = new Map(HL_TOOLS.map((t) => [t.name, t]));
 
 // ../../src/main/hl/agent.ts
-var MAX_ITERATIONS = 25;
 var DEFAULT_MODEL = process.env.HL_MODEL ?? "claude-opus-4-7";
-var MAX_TOKENS = 4096;
-var SYSTEM_PROMPT = `You control a Chromium tab via a small set of CDP-backed tools.
+var MAX_TOKENS = parseInt(process.env.HL_MAX_TOKENS ?? "4096", 10);
+var MAX_ITERATIONS = parseInt(process.env.HL_MAX_ITERATIONS ?? "200", 10);
+var SYSTEM_PROMPT = `You control a Chromium tab via CDP-backed tools AND have full local filesystem + shell access.
 You are working inside a desktop browser app; the attached tab is the user's current tab.
 
-Operating principles:
-- Coordinate clicks (click(x,y)) are the default interaction \u2014 they pass through iframes and shadow DOM.
-- Before clicking, use js() with getBoundingClientRect() to get accurate coords. Do not eyeball from screenshots.
+## What actually works
+
+- **Screenshots first**: use screenshot() to understand the current page quickly, find visible targets, and decide next.
+- **Clicking**: screenshot() \u2192 look \u2192 click(x, y) \u2192 screenshot() again to verify. Coordinate clicks pass through iframes/shadow/cross-origin at the compositor level.
+- **Before clicking**: use js() with getBoundingClientRect() to get accurate coords. Do not eyeball from screenshots.
+- **Bulk HTTP**: http_get(url) for static pages/APIs \u2014 much faster than loading in a tab.
+- **After goto**: wait_for_load().
+- **Wrong/stale tab**: ensure_real_tab(). Use it when the current tab is stale or internal.
+- **Verification**: page_info() is the simplest "is this alive?" check, but screenshots are the default way to verify.
+- **DOM reads**: use js(...) for inspection and extraction when screenshots show coordinates are the wrong tool.
+- **Iframe sites**: click(x, y) passes through; only drop to iframe DOM work when coordinate clicks are the wrong tool.
+- **Auth wall**: redirected to login \u2192 stop and ask the user. Don't type credentials from screenshots.
+- **Raw CDP** for anything helpers don't cover: cdp("Domain.method", params).
+
+## Browser interaction details
+
 - For React-controlled inputs, type_text may be overwritten \u2014 use react_set_value instead.
 - For special keys (Enter, Tab), if press_key does not trigger the DOM listener, fall back to dispatch_key.
 - Call capture_dialogs BEFORE any action that might open alert/confirm/prompt \u2014 otherwise the page JS thread freezes.
 - capture_dialogs stubs are lost on navigation \u2014 re-call after goto().
 - For cross-origin iframes, use iframe_target then js(expr, target_id). Same-origin nested iframes are NOT CDP targets \u2014 walk contentDocument.
 - Shadow DOM: querySelector does NOT pierce \u2014 walk element.shadowRoot recursively.
-- For static pages or APIs, http_get is faster than loading in a browser.
+- First navigation should be new_tab(url), not goto(url) \u2014 goto runs in the user's active tab and clobbers their work.
+
+## Skills
+
+- When goto() returns domain_skills, read the listed skill files before proceeding \u2014 they contain site-specific selectors, APIs, and traps.
+- Search domain-skills/ first for the domain you are working on before inventing a new approach.
+- If you struggle with a specific mechanic, check interaction-skills/ for helpers (dialogs, dropdowns, iframes, shadow-dom, uploads, etc.).
+- Use shell to search skills: shell({command: "ls domain-skills/"}) or shell({command: "cat domain-skills/github/navigation.md"}).
+
+## Always contribute back
+
+If you learned anything non-obvious about how a site works, write it to domain-skills/<site>/<topic>.md before calling done.
+Worth capturing: private APIs, stable selectors, framework quirks, URL patterns, waits that wait_for_load() misses, traps.
+Do NOT write: raw pixel coordinates, run narration, secrets/cookies, or user-specific state.
+
+## Filesystem + shell
+
+- You can read, write, and patch files on the local machine via read_file, write_file, patch_file.
+- You can list directories via list_dir and run shell commands via shell.
+- You can edit your own source code (this harness). The source lives in the project directory.
+- Use patch_file for surgical edits (find-and-replace); use write_file for new files or full rewrites.
+- Use shell for git, build commands, grep, or any CLI tool.
+
+## General
+
+- After every meaningful action, re-screenshot before assuming it worked.
+- Prefer compositor-level actions over framework hacks.
 - Call the \`done\` tool with a short user-facing summary when the task is complete.
 - Be concise. Act, don't narrate.`;
 function previewResult(r, limit = 240) {
@@ -763,15 +946,35 @@ async function runAgent(opts) {
   const { ctx, prompt, apiKey, signal, onEvent } = opts;
   const client = new import_sdk.default({ apiKey });
   const tools = asTools();
-  const messages = [{ role: "user", content: prompt }];
+  const messages = [
+    ...opts.priorMessages ?? [],
+    { role: "user", content: prompt }
+  ];
   const model = opts.model ?? DEFAULT_MODEL;
   const system = [
     { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }
   ];
-  for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
+  for (let iter = 1; ; iter++) {
+    if (iter > MAX_ITERATIONS) {
+      mainLogger.warn("hl.agent.maxIterations", { iter, max: MAX_ITERATIONS });
+      onEvent({ type: "done", summary: `Reached maximum iterations (${MAX_ITERATIONS})`, iterations: iter });
+      return messages;
+    }
     if (signal?.aborted) {
-      onEvent({ type: "error", message: "cancelled" });
-      return;
+      onEvent({ type: "done", summary: "Halted by user", iterations: iter });
+      return messages;
+    }
+    const queued = opts.drainQueue?.() ?? null;
+    if (queued) {
+      mainLogger.info("hl.agent.steer", { iter, promptLength: queued.length });
+      onEvent({ type: "user_input", text: queued });
+      const last = messages[messages.length - 1];
+      if (last?.role === "user") {
+        const existing = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
+        last.content = existing + "\n\n[User interruption]: " + queued;
+      } else {
+        messages.push({ role: "user", content: "[User interruption]: " + queued });
+      }
     }
     mainLogger.info("hl.agent.iter", { iter, model, ctx: ctx.name, messages: messages.length });
     let finalMsg;
@@ -788,14 +991,20 @@ async function runAgent(opts) {
       const msg = err.message ?? "anthropic_error";
       mainLogger.error("hl.agent.apiError", { error: msg, iter });
       onEvent({ type: "error", message: `api_error: ${msg}` });
-      return;
+      return messages;
     }
     const u = finalMsg.usage;
     if (u) mainLogger.info("hl.agent.cache", { iter, cache_read: u.cache_read_input_tokens ?? 0, cache_create: u.cache_creation_input_tokens ?? 0 });
+    mainLogger.info("hl.agent.response", {
+      iter,
+      stop_reason: finalMsg.stop_reason,
+      content_blocks: finalMsg.content.length,
+      types: finalMsg.content.map((b) => b.type)
+    });
     if (finalMsg.stop_reason !== "tool_use") {
       const text = finalMsg.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
       onEvent({ type: "done", summary: text || "(no response)", iterations: iter });
-      return;
+      return messages;
     }
     const toolResults = [];
     let doneSummary = null;
@@ -805,6 +1014,7 @@ async function runAgent(opts) {
       const args = tu.input ?? {};
       onEvent({ type: "tool_call", name: tu.name, args, iteration: iter });
       const tool = HL_TOOL_BY_NAME.get(tu.name);
+      mainLogger.info("hl.agent.toolDispatch", { iter, tool: tu.name, id: tu.id });
       const t0 = Date.now();
       if (!tool) {
         const msg = `unknown_tool: ${tu.name}`;
@@ -820,6 +1030,15 @@ async function runAgent(opts) {
         if (tu.name === "done" && r && typeof r === "object" && "summary" in r) {
           doneSummary = String(r.summary);
         }
+        if ((tu.name === "write_file" || tu.name === "patch_file") && r && typeof r === "object" && "path" in r) {
+          const writtenPath = String(r.path);
+          const skillMatch = writtenPath.match(/(?:domain-skills|interaction-skills)\/([^/]+)\/([^/]+)\.md$/);
+          if (skillMatch) {
+            const rObj = r;
+            const bytes = typeof rObj.bytes === "number" ? rObj.bytes : 0;
+            onEvent({ type: "skill_written", path: writtenPath, domain: skillMatch[1], topic: skillMatch[2], bytes });
+          }
+        }
       } catch (err) {
         const msg = err.message ?? String(err);
         toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: `error: ${msg}`, is_error: true });
@@ -828,12 +1047,11 @@ async function runAgent(opts) {
     }
     if (doneSummary !== null) {
       onEvent({ type: "done", summary: doneSummary, iterations: iter });
-      return;
+      return messages;
     }
     messages.push({ role: "assistant", content: finalMsg.content });
     messages.push({ role: "user", content: toolResults });
   }
-  onEvent({ type: "error", message: `iteration_budget_exhausted after ${MAX_ITERATIONS}` });
 }
 
 // ../../src/main/hl/cli.ts
