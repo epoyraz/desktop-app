@@ -1,87 +1,50 @@
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import os from 'node:os';
+import { spawn, type ChildProcess } from 'node:child_process';
+import net from 'node:net';
 import { session } from 'electron';
+import WebSocket from 'ws';
 import { mainLogger } from '../logger';
 import { getChromeUserDataDir } from './profiles';
 
-const PBKDF2_ITERATIONS = 1003;
-const PBKDF2_KEY_LEN = 16;
-const PBKDF2_SALT = 'saltysalt';
-const AES_IV = Buffer.alloc(16, 0x20);
+const CHROME_PATHS_MACOS = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+];
 
+const SKIP_DIRS = new Set([
+  'Service Worker', 'Extensions', 'IndexedDB', 'Local Extension Settings',
+  'Local Storage', 'GPUCache', 'Shared Dictionary', 'SharedCache',
+]);
+const SKIP_FILES = new Set([
+  'SingletonLock', 'SingletonSocket', 'SingletonCookie',
+  'lockfile', 'RunningChromeVersion', 'History',
+]);
 
-function getChromeSafeStoragePassword(): string {
-  try {
-    const password = execSync(
-      'security find-generic-password -s "Chrome Safe Storage" -w',
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim();
+const CDP_STARTUP_TIMEOUT_MS = 15000;
+const CDP_COOKIE_TIMEOUT_MS = 10000;
 
-    mainLogger.info('chromeImport.getKeychainPassword.ok', {
-      passwordLength: password.length,
+function findChromeBinary(): string {
+  for (const p of CHROME_PATHS_MACOS) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error('Chrome not found. Install Google Chrome to import cookies.');
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address();
+      if (!addr || typeof addr === 'string') { srv.close(); reject(new Error('no port')); return; }
+      const port = addr.port;
+      srv.close(() => resolve(port));
     });
-    return password;
-  } catch (err) {
-    mainLogger.error('chromeImport.getKeychainPassword.failed', {
-      error: (err as Error).message,
-    });
-    throw new Error('Failed to read Chrome Safe Storage password from Keychain');
-  }
-}
-
-function deriveKey(password: string): Buffer {
-  return crypto.pbkdf2Sync(
-    password,
-    PBKDF2_SALT,
-    PBKDF2_ITERATIONS,
-    PBKDF2_KEY_LEN,
-    'sha1',
-  );
-}
-
-function decryptCookieValue(encryptedValue: Buffer, key: Buffer): string {
-  if (encryptedValue.length === 0) return '';
-
-  // v10 prefix = AES-128-CBC with PBKDF2-derived key
-  if (encryptedValue.length >= 3 && encryptedValue.subarray(0, 3).toString('ascii') === 'v10') {
-    const ciphertext = encryptedValue.subarray(3);
-    try {
-      const decipher = crypto.createDecipheriv('aes-128-cbc', key, AES_IV);
-      const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-      return decrypted.toString('utf-8');
-    } catch (err) {
-      mainLogger.debug('chromeImport.decryptCookie.v10Failed', {
-        error: (err as Error).message,
-        length: encryptedValue.length,
-      });
-      return '';
-    }
-  }
-
-  // Unencrypted value (no prefix)
-  return encryptedValue.toString('utf-8');
-}
-
-function chromeSameSiteToElectron(value: number): 'unspecified' | 'no_restriction' | 'lax' | 'strict' {
-  switch (value) {
-    case -1: return 'unspecified';
-    case 0: return 'no_restriction';
-    case 1: return 'lax';
-    case 2: return 'strict';
-    default: return 'unspecified';
-  }
-}
-
-interface ChromeCookieRow {
-  host_key: string;
-  name: string;
-  path: string;
-  encrypted_value: Buffer;
-  value: string;
-  is_secure: number;
-  is_httponly: number;
-  samesite: number;
+    srv.on('error', reject);
+  });
 }
 
 export interface CookieImportResult {
@@ -94,49 +57,169 @@ export interface CookieImportResult {
   errorReasons: Record<string, number>;
 }
 
-export async function importChromeProfileCookies(profileDir: string): Promise<CookieImportResult> {
-  const cookiesDbPath = path.join(getChromeUserDataDir(), profileDir, 'Cookies');
+interface CdpCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires: number;
+  size: number;
+  httpOnly: boolean;
+  secure: boolean;
+  session: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
 
-  mainLogger.info('chromeImport.importCookies.start', {
-    profileDir,
-    dbPath: cookiesDbPath,
+function cdpSameSiteToElectron(value?: string): 'unspecified' | 'no_restriction' | 'lax' | 'strict' {
+  switch (value) {
+    case 'Strict': return 'strict';
+    case 'Lax': return 'lax';
+    case 'None': return 'no_restriction';
+    default: return 'unspecified';
+  }
+}
+
+async function copyProfileToTemp(profilePath: string): Promise<string> {
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'chrome-profile-'));
+  const destProfile = path.join(tempDir, 'Default');
+
+  async function copyDir(src: string, dst: string): Promise<void> {
+    await fsp.mkdir(dst, { recursive: true });
+    let entries;
+    try {
+      entries = await fsp.readdir(src, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        await copyDir(path.join(src, entry.name), path.join(dst, entry.name));
+      } else {
+        if (SKIP_FILES.has(entry.name)) continue;
+        try {
+          await fsp.copyFile(path.join(src, entry.name), path.join(dst, entry.name));
+        } catch {
+          // skip files we can't read (permission issues, broken symlinks)
+        }
+      }
+    }
+  }
+
+  await copyDir(profilePath, destProfile);
+  mainLogger.info('chromeImport.copyProfile', { src: profilePath, dest: tempDir });
+  return tempDir;
+}
+
+async function launchChromeHeadless(tempUserDataDir: string, debugPort: number): Promise<ChildProcess> {
+  const chromeBin = findChromeBinary();
+
+  mainLogger.info('chromeImport.launchChrome', { chromeBin, tempUserDataDir, debugPort });
+
+  const proc = spawn(chromeBin, [
+    '--headless=new',
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-default-browser-check',
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${tempUserDataDir}`,
+  ], {
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  // Dynamic import to avoid bundling issues — better-sqlite3 is a native module
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  let db;
+  let stderrBuf = '';
+  proc.stderr?.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString(); });
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      proc.kill();
+      reject(new Error(`Chrome headless did not start within ${CDP_STARTUP_TIMEOUT_MS}ms.\n\nstderr: ${stderrBuf.slice(0, 500)}`));
+    }, CDP_STARTUP_TIMEOUT_MS);
+
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      if (text.includes('DevTools listening on')) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+
+    proc.on('exit', (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`Chrome exited with code ${code}.\n\nstderr: ${stderrBuf.slice(0, 500)}`));
+    });
+  });
+
+  mainLogger.info('chromeImport.chromeStarted', { debugPort });
+  return proc;
+}
+
+async function getCookiesViaCdp(port: number): Promise<CdpCookie[]> {
+  const versionRes = await fetch(`http://127.0.0.1:${port}/json/version`);
+  const versionInfo = (await versionRes.json()) as { webSocketDebuggerUrl: string };
+  const wsUrl = versionInfo.webSocketDebuggerUrl;
+
+  mainLogger.info('chromeImport.cdpConnect', { wsUrl });
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('CDP cookie fetch timed out'));
+    }, CDP_COOKIE_TIMEOUT_MS);
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ id: 1, method: 'Storage.getCookies', params: {} }));
+    });
+
+    ws.on('message', (data: WebSocket.RawData) => {
+      try {
+        const msg = JSON.parse(data.toString()) as {
+          id?: number;
+          result?: { cookies: CdpCookie[] };
+          error?: { message: string };
+        };
+        if (msg.id === 1) {
+          clearTimeout(timeout);
+          ws.close();
+          if (msg.error) reject(new Error(`CDP error: ${msg.error.message}`));
+          else resolve(msg.result?.cookies ?? []);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        ws.close();
+        reject(err);
+      }
+    });
+
+    ws.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(new Error(`CDP WebSocket error: ${err.message}`));
+    });
+  });
+}
+
+export async function importChromeProfileCookies(profileDir: string): Promise<CookieImportResult> {
+  mainLogger.info('chromeImport.importCookies.start', { profileDir });
+
+  const profilePath = path.join(getChromeUserDataDir(), profileDir);
+  const tempDir = await copyProfileToTemp(profilePath);
+  const debugPort = await getFreePort();
+
+  let proc: ChildProcess | null = null;
+  let cookies: CdpCookie[];
 
   try {
-    db = new Database(cookiesDbPath, { readonly: true, fileMustExist: true });
-  } catch (err) {
-    mainLogger.error('chromeImport.importCookies.dbOpenFailed', {
-      error: (err as Error).message,
-      dbPath: cookiesDbPath,
-    });
-    throw new Error(`Cannot open Chrome cookies database: ${(err as Error).message}`);
+    proc = await launchChromeHeadless(tempDir, debugPort);
+    cookies = await getCookiesViaCdp(debugPort);
+  } finally {
+    if (proc) proc.kill();
+    fsp.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 
-  const password = getChromeSafeStoragePassword();
-  const key = deriveKey(password);
-
-  let rows: ChromeCookieRow[];
-  try {
-    rows = db.prepare(
-      'SELECT host_key, name, path, encrypted_value, value, is_secure, is_httponly, samesite FROM cookies',
-    ).all() as ChromeCookieRow[];
-  } catch (err) {
-    db.close();
-    mainLogger.error('chromeImport.importCookies.queryFailed', {
-      error: (err as Error).message,
-    });
-    throw new Error(`Failed to query cookies: ${(err as Error).message}`);
-  }
-
-  db.close();
-
-  mainLogger.info('chromeImport.importCookies.rowsRead', {
-    totalRows: rows.length,
+  mainLogger.info('chromeImport.importCookies.cookiesFetched', {
+    total: cookies.length,
   });
 
   const electronSession = session.defaultSession;
@@ -147,41 +230,27 @@ export async function importChromeProfileCookies(profileDir: string): Promise<Co
   const failedDomainSet = new Set<string>();
   const errorReasons: Record<string, number> = {};
 
-  for (const row of rows) {
-    let value = row.value;
-    if (!value && row.encrypted_value && row.encrypted_value.length > 0) {
-      value = decryptCookieValue(row.encrypted_value, key);
-    }
-
-    if (!value) {
+  for (const cookie of cookies) {
+    if (!cookie.value || !cookie.name) {
       skipped++;
       continue;
     }
 
-    // Strip ASCII control characters (0x00-0x1F, 0x7F) — Electron rejects cookies containing them
-    // eslint-disable-next-line no-control-regex
-    value = value.replace(/[\x00-\x1F\x7F]/g, '');
-    const cookieName = row.name.replace(/[\x00-\x1F\x7F]/g, '');
-
-    if (!value || !cookieName) {
-      skipped++;
-      continue;
-    }
-
-    const domain = row.host_key.startsWith('.') ? row.host_key.substring(1) : row.host_key;
-    const scheme = row.is_secure ? 'https' : 'http';
-    const url = `${scheme}://${domain}${row.path}`;
+    const domain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
+    const scheme = cookie.secure ? 'https' : 'http';
+    const url = `${scheme}://${domain}${cookie.path}`;
 
     try {
       await electronSession.cookies.set({
         url,
-        name: cookieName,
-        value,
-        domain: row.host_key,
-        path: row.path,
-        secure: row.is_secure === 1,
-        httpOnly: row.is_httponly === 1,
-        sameSite: chromeSameSiteToElectron(row.samesite),
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cdpSameSiteToElectron(cookie.sameSite),
+        ...(cookie.session ? {} : { expirationDate: cookie.expires }),
       });
       imported++;
       importedDomains.add(domain);
@@ -191,12 +260,11 @@ export async function importChromeProfileCookies(profileDir: string): Promise<Co
       const reason = (err as Error).message || 'Unknown error';
       errorReasons[reason] = (errorReasons[reason] || 0) + 1;
       if (failed <= 20) {
-        mainLogger.debug('chromeImport.importCookies.setCookieFailed', {
-          name: row.name,
-          domain: row.host_key,
-          url,
-          secure: row.is_secure,
-          samesite: row.samesite,
+        mainLogger.info('chromeImport.cookieFail', {
+          name: cookie.name,
+          domain: cookie.domain,
+          secure: cookie.secure,
+          sameSite: cookie.sameSite,
           error: reason,
         });
       }
@@ -207,7 +275,7 @@ export async function importChromeProfileCookies(profileDir: string): Promise<Co
   const failedDomains = Array.from(failedDomainSet).filter((d) => !importedDomains.has(d));
 
   const result: CookieImportResult = {
-    total: rows.length,
+    total: cookies.length,
     imported,
     failed,
     skipped,
