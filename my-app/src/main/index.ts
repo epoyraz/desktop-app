@@ -476,6 +476,17 @@ app.whenReady().then(async () => {
     }
 
     const shellPid = shellWindow?.webContents.getOSProcessId() ?? -1;
+    const knownWindowPids = new Map<number, string>();
+    for (const win of BrowserWindow.getAllWindows()) {
+      try {
+        const pid = win.webContents.getOSProcessId();
+        const title = win.getTitle();
+        if (pid === shellPid) knownWindowPids.set(pid, 'Hub UI');
+        else if (title.toLowerCase().includes('setting')) knownWindowPids.set(pid, 'Settings');
+        else if (title.toLowerCase().includes('onboard')) knownWindowPids.set(pid, 'Onboarding');
+        else knownWindowPids.set(pid, title || 'Window');
+      } catch { /* destroyed */ }
+    }
 
     let totalMb = 0;
     const sessions: Array<{ id: string; mb: number; status: string }> = [];
@@ -492,8 +503,10 @@ app.whenReady().then(async () => {
         const label = prompt.length > 30 ? prompt.slice(0, 30) + '...' : prompt;
         sessions.push({ id: sessionId, mb, status: session?.status ?? 'unknown' });
         processes.push({ label, type: 'session', mb, sessionId });
-      } else if (m.pid === shellPid) {
-        processes.push({ label: 'Hub UI', type: 'tab', mb });
+      } else if (knownWindowPids.has(m.pid)) {
+        processes.push({ label: knownWindowPids.get(m.pid)!, type: 'window', mb });
+      } else if (m.type === 'Tab') {
+        processes.push({ label: 'Session', type: 'session', mb });
       } else if (m.type === 'Browser') {
         processes.push({ label: 'App', type: 'main', mb });
       } else if (m.type === 'GPU') {
