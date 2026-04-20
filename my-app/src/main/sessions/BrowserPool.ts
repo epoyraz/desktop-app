@@ -155,6 +155,24 @@ export class BrowserPool {
     return true;
   }
 
+  sendAllToBack(window: BrowserWindow): void {
+    const mainView = window.contentView.children[0];
+    if (!mainView) return;
+    window.contentView.removeChildView(mainView);
+    window.contentView.addChildView(mainView);
+    mainLogger.info('BrowserPool.sendAllToBack', { msg: 'main view promoted to top' });
+  }
+
+  bringAllToFront(window: BrowserWindow): void {
+    for (const entry of this.entries.values()) {
+      if (entry.attached) {
+        window.contentView.removeChildView(entry.view);
+        window.contentView.addChildView(entry.view);
+      }
+    }
+    mainLogger.info('BrowserPool.bringAllToFront', { msg: 'browser views promoted to top' });
+  }
+
   async getTabs(sessionId: string): Promise<TabInfo[]> {
     const wc = this.getWebContents(sessionId);
     if (!wc) return [];

@@ -176,14 +176,15 @@ export class SessionDb {
     return (this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined) ?? null;
   }
 
-  listSessions(opts?: { status?: SessionStatus; limit?: number; offset?: number }): SessionRow[] {
+  listSessions(opts?: { status?: SessionStatus; limit?: number; offset?: number; includeHidden?: boolean }): SessionRow[] {
+    const hiddenFilter = opts?.includeHidden ? '' : ' AND hidden = 0';
     if (opts?.status) {
       return this.db.prepare(
-        'SELECT * FROM sessions WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+        `SELECT * FROM sessions WHERE status = ?${hiddenFilter} ORDER BY created_at DESC LIMIT ? OFFSET ?`
       ).all(opts.status, opts.limit ?? 1000, opts.offset ?? 0) as SessionRow[];
     }
     return this.db.prepare(
-      'SELECT * FROM sessions ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      `SELECT * FROM sessions WHERE 1=1${hiddenFilter} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     ).all(opts?.limit ?? 1000, opts?.offset ?? 0) as SessionRow[];
   }
 

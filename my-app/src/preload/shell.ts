@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const raw = await ipcRenderer.invoke('sessions:list');
       return validateSessionList(raw);
     },
+    listAll: async (): Promise<AgentSession[]> => {
+      const raw = await ipcRenderer.invoke('sessions:list-all');
+      return validateSessionList(raw);
+    },
     get: async (id: string): Promise<AgentSession | null> => {
       const raw = await ipcRenderer.invoke('sessions:get', id);
       if (!raw) return null;
@@ -42,6 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('sessions:view-resize', id, bounds),
     viewIsAttached: (id: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-is-attached', id),
+    viewsSetVisible: (visible: boolean): Promise<void> =>
+      ipcRenderer.invoke('sessions:views-set-visible', visible),
     getTabs: async (id: string): Promise<TabInfo[]> => {
       const raw = await ipcRenderer.invoke('sessions:get-tabs', id);
       return validateTabs(raw);

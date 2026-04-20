@@ -42,11 +42,13 @@ interface ElectronSessionAPI {
   unhide: (id: string) => Promise<void>;
   resume: (id: string, prompt: string) => Promise<{ resumed?: boolean; error?: string }>;
   list: () => Promise<import('./hub/types').AgentSession[]>;
+  listAll: () => Promise<import('./hub/types').AgentSession[]>;
   get: (id: string) => Promise<import('./hub/types').AgentSession | null>;
   viewAttach: (id: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
   viewDetach: (id: string) => Promise<boolean>;
   viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
   viewIsAttached: (id: string) => Promise<boolean>;
+  viewsSetVisible: (visible: boolean) => Promise<void>;
   getTabs: (id: string) => Promise<unknown[]>;
   poolStats: () => Promise<unknown>;
   memory: () => Promise<{ totalMb: number; sessions: Array<{ id: string; mb: number; status: string }>; processes: Array<{ label: string; type: string; mb: number; sessionId?: string }>; processCount: number }>;
