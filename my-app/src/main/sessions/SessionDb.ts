@@ -262,13 +262,17 @@ export class SessionDb {
   recoverStaleSessions(): number {
     const now = Date.now();
     try {
-      const result = this.db.prepare(
-        "UPDATE sessions SET status = 'stopped', error = ?, updated_at = ? WHERE status IN ('running', 'stuck', 'idle')"
+      const crashed = this.db.prepare(
+        "UPDATE sessions SET status = 'stopped', error = ?, updated_at = ? WHERE status IN ('running', 'stuck')"
       ).run(RECOVERY_ERROR, now);
-      if (result.changes > 0) {
-        mainLogger.warn('SessionDb.recoverStaleSessions', { recovered: result.changes });
+      const idle = this.db.prepare(
+        "UPDATE sessions SET status = 'stopped', updated_at = ? WHERE status = 'idle'"
+      ).run(now);
+      const total = crashed.changes + idle.changes;
+      if (total > 0) {
+        mainLogger.warn('SessionDb.recoverStaleSessions', { crashed: crashed.changes, idle: idle.changes });
       }
-      return result.changes;
+      return total;
     } catch (err) {
       mainLogger.error('SessionDb.recoverStaleSessions.failed', { error: (err as Error).message });
       return 0;
