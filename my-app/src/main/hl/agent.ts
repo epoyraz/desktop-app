@@ -41,6 +41,7 @@ export interface RunAgentOptions {
   signal?: AbortSignal;
   onEvent: (e: HlEvent) => void;
   model?: string;
+  priorMessages?: MessageParam[];
 }
 
 const SYSTEM_PROMPT = `You control a Chromium tab via CDP-backed tools AND have full local filesystem + shell access.
@@ -117,11 +118,14 @@ function asTools(): Tool[] {
   return tools;
 }
 
-export async function runAgent(opts: RunAgentOptions): Promise<void> {
+export async function runAgent(opts: RunAgentOptions): Promise<MessageParam[]> {
   const { ctx, prompt, apiKey, signal, onEvent } = opts;
   const client = new Anthropic({ apiKey });
   const tools = asTools();
-  const messages: MessageParam[] = [{ role: 'user', content: prompt }];
+  const messages: MessageParam[] = [
+    ...(opts.priorMessages ?? []),
+    { role: 'user', content: prompt },
+  ];
   const model = opts.model ?? DEFAULT_MODEL;
 
   // Cached system prompt — same text across iterations, same cache hit.
@@ -130,7 +134,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   ];
 
   for (let iter = 1; ; iter++) {
-    if (signal?.aborted) { onEvent({ type: 'error', message: 'cancelled' }); return; }
+    if (signal?.aborted) { onEvent({ type: 'error', message: 'cancelled' }); return messages; }
     mainLogger.info('hl.agent.iter', { iter, model, ctx: ctx.name, messages: messages.length });
 
     let finalMsg: { content: ContentBlock[]; stop_reason: string | null; usage?: unknown };
@@ -148,7 +152,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       const msg = (err as Error).message ?? 'anthropic_error';
       mainLogger.error('hl.agent.apiError', { error: msg, iter });
       onEvent({ type: 'error', message: `api_error: ${msg}` });
-      return;
+      return messages;
     }
 
     // Cache-hit telemetry (not user-facing; shows the breakpoints are doing work).
@@ -169,7 +173,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
         .map((b) => b.text)
         .join('\n').trim();
       onEvent({ type: 'done', summary: text || '(no response)', iterations: iter });
-      return;
+      return messages;
     }
 
     // Execute every tool_use block; gather tool_result blocks for the next turn.
@@ -216,7 +220,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       }
     }
 
-    if (doneSummary !== null) { onEvent({ type: 'done', summary: doneSummary, iterations: iter }); return; }
+    if (doneSummary !== null) { onEvent({ type: 'done', summary: doneSummary, iterations: iter }); return messages; }
 
     messages.push({ role: 'assistant', content: finalMsg.content });
     messages.push({ role: 'user', content: toolResults });

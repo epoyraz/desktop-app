@@ -172,6 +172,7 @@ app.whenReady().then(async () => {
 
   // Active HL agent abort controllers keyed by task_id
   const activeAgents = new Map<string, AbortController>();
+  const sessionMessages = new Map<string, Array<{ role: string; content: unknown }>>();
 
   // pill:submit — runs the HL in-process agent
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
@@ -322,6 +323,8 @@ app.whenReady().then(async () => {
           sessionManager.appendOutput(validatedId, event);
         }
       },
+    }).then((msgs) => {
+      if (msgs) sessionMessages.set(validatedId, msgs as Array<{ role: string; content: unknown }>);
     }).catch((err: Error) => {
       mainLogger.error('main.sessions:start.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
@@ -361,11 +364,15 @@ app.whenReady().then(async () => {
       return { error: msg };
     }
 
+    const priorMessages = sessionMessages.get(validatedId) as import('@anthropic-ai/sdk/resources/messages').MessageParam[] | undefined;
+    mainLogger.info('main.sessions:resume.context', { id: validatedId, priorMessageCount: priorMessages?.length ?? 0 });
+
     runAgent({
       ctx,
       prompt: validatedPrompt,
       apiKey,
       signal: abortController.signal,
+      priorMessages,
       onEvent: (event) => {
         if (event.type === 'done') {
           sessionManager.appendOutput(validatedId, event);
@@ -377,6 +384,8 @@ app.whenReady().then(async () => {
           sessionManager.appendOutput(validatedId, event);
         }
       },
+    }).then((msgs) => {
+      if (msgs) sessionMessages.set(validatedId, msgs as Array<{ role: string; content: unknown }>);
     }).catch((err: Error) => {
       mainLogger.error('main.sessions:resume.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
@@ -429,6 +438,13 @@ app.whenReady().then(async () => {
     }));
   });
 
+  ipcMain.handle('sessions:list-all', () => {
+    return sessionManager.listSessions({ includeHidden: true }).map((s) => ({
+      ...s,
+      hasBrowser: !!browserPool.getWebContents(s.id),
+    }));
+  });
+
   ipcMain.handle('sessions:get', (_event, id: string) => {
     const validatedId = assertString(id, 'id', 100);
     const session = sessionManager.getSession(validatedId);
@@ -460,6 +476,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('sessions:view-is-attached', (_event, id: string) => {
     const validatedId = assertString(id, 'id', 100);
     return browserPool.isAttached(validatedId);
+  });
+
+  ipcMain.handle('sessions:views-set-visible', (_event, visible: boolean) => {
+    if (!shellWindow) return;
+    if (!visible) {
+      browserPool.sendAllToBack(shellWindow);
+    } else {
+      browserPool.bringAllToFront(shellWindow);
+    }
   });
 
   ipcMain.handle('sessions:get-tabs', async (_event, id: string) => {
