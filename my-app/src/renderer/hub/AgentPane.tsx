@@ -14,6 +14,18 @@ function formatElapsed(createdAt: number): string {
   return `${hours}h`;
 }
 
+function friendlyError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes('credit balance is too low') || lower.includes('insufficient_quota')) return 'API credits exhausted. Please add credits to your Anthropic account.';
+  if (lower.includes('invalid_api_key') || lower.includes('no api key')) return 'No API key configured. Add your key in Settings.';
+  if (lower.includes('rate_limit') || lower.includes('rate limit')) return 'Rate limited. Too many requests — try again in a moment.';
+  if (lower.includes('overloaded') || lower.includes('529')) return 'API is overloaded. Try again shortly.';
+  if (lower.includes('cancelled')) return 'Task was cancelled.';
+  if (lower.includes('app exited unexpectedly')) return 'App exited unexpectedly during this task.';
+  if (lower.includes('cdp') || lower.includes('browser session expired')) return 'Browser session expired. Start a new task.';
+  return raw.length > 120 ? raw.slice(0, 120) + '...' : raw;
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -329,7 +341,7 @@ function CloseIcon(): React.ReactElement {
 interface AgentPaneProps {
   session: AgentSession;
   focused?: boolean;
-  onRerun?: (prompt: string) => void;
+  onRerun?: (sessionId: string) => void;
   onFollowUp?: (sessionId: string, prompt: string) => void;
   onDismiss?: (sessionId: string) => void;
   onCancel?: (sessionId: string) => void;
@@ -453,7 +465,7 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
           {onRerun && (
             <button
               className="pane__action-btn"
-              onClick={() => onRerun(session.prompt)}
+              onClick={() => onRerun(session.id)}
             >
               <RerunIcon />
               <span>Rerun</span>
@@ -534,10 +546,32 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
             onUserInput={(text) => onFollowUp(session.id, text)}
           />
         )}
-        {(session.status === 'stopped' || session.error) && onRerun && (
+        {session.error && entries.length <= 2 && (
+          <div className="pane__error-center">
+            <div className="pane__error-icon">
+              <ErrorIcon />
+            </div>
+            <p className="pane__error-msg">{friendlyError(session.error)}</p>
+            {onRerun && (
+              <button className="pane__rerun-btn" onClick={() => onRerun(session.id)}>
+                <RerunIcon />
+                <span>Rerun task</span>
+              </button>
+            )}
+          </div>
+        )}
+        {session.error && entries.length > 2 && onRerun && (
           <div className="pane__rerun">
-            {session.error && <span className="pane__rerun-error">{session.error}</span>}
-            <button className="pane__rerun-btn" onClick={() => onRerun(session.prompt)}>
+            <span className="pane__rerun-error">{friendlyError(session.error)}</span>
+            <button className="pane__rerun-btn" onClick={() => onRerun(session.id)}>
+              <RerunIcon />
+              <span>Rerun task</span>
+            </button>
+          </div>
+        )}
+        {!session.error && session.status === 'stopped' && onRerun && (
+          <div className="pane__rerun">
+            <button className="pane__rerun-btn" onClick={() => onRerun(session.id)}>
               <RerunIcon />
               <span>Rerun task</span>
             </button>

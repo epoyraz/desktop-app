@@ -395,7 +395,9 @@ export function HubApp(): React.ReactElement {
           sessions={sessions}
           onSwitchToGrid={() => setViewMode('grid')}
           onSelectSession={(id) => {
+            window.electronAPI?.sessions.unhide(id).catch(() => {});
             handleSelectSession(id);
+            sessionsQuery.refetch();
             setViewMode('grid');
           }}
         />
@@ -417,7 +419,9 @@ export function HubApp(): React.ReactElement {
                       key={session.id}
                       session={session}
                       focused={globalIdx === focusIndex}
-                      onRerun={handleCreateSession}
+                      onRerun={(id) => {
+                        window.electronAPI?.sessions.rerun(id).catch((err) => console.error('[HubApp] rerun failed', err));
+                      }}
                       onFollowUp={handleFollowUp}
                       onDismiss={(id) => {
                         window.electronAPI?.sessions.viewDetach(id).catch(() => {});
@@ -456,7 +460,9 @@ export function HubApp(): React.ReactElement {
         <ListView
           sessions={sessions}
           onSelectSession={(id) => {
+            window.electronAPI?.sessions.unhide(id).catch(() => {});
             handleSelectSession(id);
+            sessionsQuery.refetch();
             const idx = sessions.findIndex((s) => s.id === id);
             if (idx >= 0) setGridPage(Math.floor(idx / 4));
             setViewMode('grid');
