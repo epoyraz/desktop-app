@@ -317,6 +317,7 @@ app.whenReady().then(async () => {
           sessionManager.completeSession(validatedId);
         } else if (event.type === 'error') {
           sessionManager.failSession(validatedId, event.message);
+          browserPool.destroy(validatedId, shellWindow ?? undefined);
         } else {
           sessionManager.appendOutput(validatedId, event);
         }
@@ -324,6 +325,7 @@ app.whenReady().then(async () => {
     }).catch((err: Error) => {
       mainLogger.error('main.sessions:start.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
+      browserPool.destroy(validatedId, shellWindow ?? undefined);
     }).finally(() => {
       mainLogger.info('main.sessions:start.agentFinished', { id: validatedId, poolStats: browserPool.getStats() });
     });
@@ -370,6 +372,7 @@ app.whenReady().then(async () => {
           sessionManager.completeSession(validatedId);
         } else if (event.type === 'error') {
           sessionManager.failSession(validatedId, event.message);
+          browserPool.destroy(validatedId, shellWindow ?? undefined);
         } else {
           sessionManager.appendOutput(validatedId, event);
         }
@@ -377,6 +380,7 @@ app.whenReady().then(async () => {
     }).catch((err: Error) => {
       mainLogger.error('main.sessions:resume.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
+      browserPool.destroy(validatedId, shellWindow ?? undefined);
     }).finally(() => {
       mainLogger.info('main.sessions:resume.agentFinished', { id: validatedId, poolStats: browserPool.getStats() });
     });
