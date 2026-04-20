@@ -10,7 +10,7 @@
  *      (or `npm run start:reset-onboarding`)
  */
 
-import { readFileSync, existsSync, unlinkSync } from "node:fs";
+import { readFileSync, existsSync, unlinkSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,10 +44,11 @@ console.log(`[reset-onboarding] productName=${productName}`);
 console.log(`[reset-onboarding] userData=${userData}`);
 
 const sessionsDb = join(userData, "sessions.db");
+const whatsappAuth = join(userData, "whatsapp-auth");
 
-for (const [label, filePath] of [["account.json", accountJson], ["sessions.db", sessionsDb]]) {
+for (const [label, filePath] of [["account.json", accountJson], ["sessions.db", sessionsDb], ["whatsapp-auth", whatsappAuth]]) {
   if (existsSync(filePath)) {
-    unlinkSync(filePath);
+    rmSync(filePath, { recursive: true, force: true });
     console.log(`[reset-onboarding] deleted ${label}`);
   } else {
     console.log(`[reset-onboarding] ${label} not found (already clean)`);
