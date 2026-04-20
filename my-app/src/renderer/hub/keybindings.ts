@@ -2,7 +2,8 @@ export type ActionId =
   | 'nav.down' | 'nav.up' | 'nav.top' | 'nav.bottom' | 'nav.open'
   | 'goto.dashboard' | 'goto.agents' | 'goto.list' | 'goto.settings'
   | 'search.open'
-  | 'action.create'
+  | 'action.create' | 'action.dismiss' | 'action.cancel'
+  | 'grid.nextPage' | 'grid.prevPage'
   | 'scroll.halfDown' | 'scroll.halfUp'
   | 'meta.help' | 'meta.commandPalette' | 'meta.escape';
 
@@ -25,6 +26,10 @@ export const DEFAULT_KEYBINDINGS: KeyBinding[] = [
   { id: 'goto.settings', label: 'Settings', keys: ['g s'], category: 'Views' },
   { id: 'search.open', label: 'Search', keys: ['/'], category: 'Actions' },
   { id: 'action.create', label: 'New agent', keys: ['c'], category: 'Actions' },
+  { id: 'action.dismiss', label: 'Dismiss session', keys: ['x'], category: 'Actions' },
+  { id: 'action.cancel', label: 'Cancel session', keys: ['Ctrl+c'], category: 'Actions' },
+  { id: 'grid.nextPage', label: 'Next page', keys: ['l'], category: 'Navigation' },
+  { id: 'grid.prevPage', label: 'Previous page', keys: ['h'], category: 'Navigation' },
   { id: 'scroll.halfDown', label: 'Scroll down', keys: ['Ctrl+d'], category: 'Scroll' },
   { id: 'scroll.halfUp', label: 'Scroll up', keys: ['Ctrl+u'], category: 'Scroll' },
   { id: 'meta.help', label: 'Keybindings help', keys: ['?'], category: 'Meta' },

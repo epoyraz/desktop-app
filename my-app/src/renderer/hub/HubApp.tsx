@@ -6,6 +6,7 @@ import { CommandBar } from './CommandBar';
 import { KeybindingsOverlay } from './KeybindingsOverlay';
 import { SettingsPane } from './SettingsPane';
 import { useVimKeys } from './useVimKeys';
+import { useSessionsQuery, useDismissSession, useUpdateSession } from './useSessionsQuery';
 import { MOCK_SESSIONS } from './mock-data';
 import type { AgentSession, HlEvent } from './types';
 import type { ActionId } from './keybindings';
@@ -68,12 +69,19 @@ function DashboardIcon(): React.ReactElement {
 }
 
 export function HubApp(): React.ReactElement {
-  const [sessions, setSessions] = useState<AgentSession[]>(MOCK_SESSIONS);
+  const isMock = import.meta.env.VITE_MOCK_MODE === '1';
+  const [mockSessions, setMockSessions] = useState<AgentSession[]>(isMock ? MOCK_SESSIONS : []);
+  const sessionsQuery = useSessionsQuery();
+  const dismissSession = useDismissSession();
+  const updateSession = useUpdateSession();
+  const sessions = isMock ? mockSessions : (sessionsQuery.data ?? []);
+  const setSessions = isMock ? setMockSessions : () => {};
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [cmdBarOpen, setCmdBarOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
+  const [gridPage, setGridPage] = useState(0);
 
   const vimHandlers = useMemo<Partial<Record<ActionId, () => void>>>(() => ({
     'nav.down': () => setFocusIndex((i) => Math.min(i + 1, sessions.length - 1)),
@@ -89,6 +97,29 @@ export function HubApp(): React.ReactElement {
     'goto.settings': () => setSettingsOpen(true),
     'search.open': () => setCmdBarOpen(true),
     'action.create': () => setCmdBarOpen(true),
+    'action.dismiss': () => {
+      const s = sessions[focusIndex];
+      if (!s) return;
+      window.electronAPI?.sessions.viewDetach(s.id).catch(() => {});
+      console.log('[VimKeys] dismiss session', s.id);
+      dismissSession(s.id);
+      setFocusIndex((i) => Math.min(i, sessions.length - 2));
+    },
+    'grid.nextPage': () => {
+      const totalPages = Math.max(1, Math.ceil(sessions.length / 4));
+      setGridPage((p) => Math.min(p + 1, totalPages - 1));
+    },
+    'grid.prevPage': () => {
+      setGridPage((p) => Math.max(p - 1, 0));
+    },
+    'action.cancel': () => {
+      const s = sessions[focusIndex];
+      if (!s || (s.status !== 'running' && s.status !== 'stuck')) return;
+      const api = window.electronAPI;
+      if (!api) return;
+      console.log('[VimKeys] cancel session', s.id);
+      api.sessions.cancel(s.id).catch((err) => console.error('[VimKeys] cancel failed', err));
+    },
     'scroll.halfDown': () => {
       const el = document.querySelector('.hub-grid, .list-view__body, .dashboard');
       if (el) el.scrollBy({ top: el.clientHeight / 2, behavior: 'smooth' });
@@ -108,43 +139,87 @@ export function HubApp(): React.ReactElement {
 
   const vim = useVimKeys(vimHandlers);
 
-  const handleCreateSession = useCallback((prompt: string) => {
-    const id = `session-${++sessionCounter}`;
-    const now = Date.now();
+  const shortcutFor = (actionId: ActionId): string => {
+    const kb = vim.keybindings.find((b) => b.id === actionId);
+    return kb?.keys[0] ?? '';
+  };
 
-    const newSession: AgentSession = {
-      id,
-      prompt,
-      status: 'running',
-      createdAt: now,
-      output: [
-        { type: 'thinking', text: `Analyzing the task: "${prompt}". Let me break this down and determine the best approach.` },
-      ],
-    };
+  const tip = (label: string, actionId: ActionId): string => {
+    const key = shortcutFor(actionId);
+    return key ? `${label}  (${key})` : label;
+  };
 
-    console.log('[HubApp] createSession', { id, prompt });
-    setSessions((prev) => [...prev, newSession]);
 
-    const pushEvent = (event: HlEvent, statusOverride?: AgentSession['status']) => {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== id) return s;
-          const updated = { ...s, output: [...s.output, event] };
-          if (statusOverride) updated.status = statusOverride;
-          return updated;
-        }),
-      );
-    };
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api || isMock) return;
+    sessions.forEach((s) => {
+      api.sessions.viewDetach(s.id).catch(() => {});
+    });
+  }, [viewMode]);
 
-    setTimeout(() => pushEvent({ type: 'tool_call', name: 'file.search', args: { pattern: '**/*.ts', query: prompt.split(' ').slice(0, 3).join(' ') }, iteration: 1 }), 2000);
-    setTimeout(() => pushEvent({ type: 'tool_result', name: 'file.search', ok: true, preview: 'Found 7 relevant files across 3 directories.', ms: 1500 }), 3500);
-    setTimeout(() => pushEvent({ type: 'thinking', text: 'I\'ve found the relevant files. Now analyzing the code structure and planning modifications.' }), 5000);
-    setTimeout(() => pushEvent({ type: 'tool_call', name: 'file.read', args: { path: 'src/main/index.ts', lines: '1-50' }, iteration: 2 }), 7000);
-    setTimeout(() => pushEvent({ type: 'tool_result', name: 'file.read', ok: true, preview: 'Read 50 lines from src/main/index.ts. Found the entry point configuration and module initialization.', ms: 800 }), 8000);
-    setTimeout(() => pushEvent({ type: 'done', summary: 'Implementation complete. I\'ve made the following changes:\n\n1. Updated the module configuration\n2. Added proper error handling\n3. Refactored the initialization sequence\n\nAll changes have been saved.', iterations: 2 }, 'stopped'), 10000);
-  }, []);
+  const handleCreateSession = useCallback(async (prompt: string) => {
+    if (isMock) {
+      const id = `session-${++sessionCounter}`;
+      const now = Date.now();
+      const newSession: AgentSession = {
+        id, prompt, status: 'running', createdAt: now,
+        output: [{ type: 'thinking', text: `Analyzing the task: "${prompt}". Let me break this down and determine the best approach.` }],
+      };
+      console.log('[HubApp] createSession (mock)', { id, prompt });
+      setSessions((prev) => [...prev, newSession]);
+
+      const pushEvent = (event: HlEvent, statusOverride?: AgentSession['status']) => {
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id !== id) return s;
+            const updated = { ...s, output: [...s.output, event] };
+            if (statusOverride) updated.status = statusOverride;
+            return updated;
+          }),
+        );
+      };
+      setTimeout(() => pushEvent({ type: 'tool_call', name: 'file.search', args: { pattern: '**/*.ts', query: prompt.split(' ').slice(0, 3).join(' ') }, iteration: 1 }), 2000);
+      setTimeout(() => pushEvent({ type: 'tool_result', name: 'file.search', ok: true, preview: 'Found 7 relevant files across 3 directories.', ms: 1500 }), 3500);
+      setTimeout(() => pushEvent({ type: 'thinking', text: 'I\'ve found the relevant files. Now analyzing the code structure.' }), 5000);
+      setTimeout(() => pushEvent({ type: 'tool_call', name: 'file.read', args: { path: 'src/main/index.ts', lines: '1-50' }, iteration: 2 }), 7000);
+      setTimeout(() => pushEvent({ type: 'tool_result', name: 'file.read', ok: true, preview: 'Read 50 lines. Found entry point configuration.', ms: 800 }), 8000);
+      setTimeout(() => pushEvent({ type: 'done', summary: 'Implementation complete.', iterations: 2 }, 'stopped'), 10000);
+      return;
+    }
+
+    const api = window.electronAPI;
+    if (!api) { console.error('[HubApp] electronAPI not available'); return; }
+
+    try {
+      console.log('[HubApp] createSession (live)', { prompt });
+      const id = await api.sessions.create(prompt);
+      console.log('[HubApp] session created', { id });
+      await api.sessions.start(id);
+      console.log('[HubApp] session started', { id });
+    } catch (err) {
+      console.error('[HubApp] createSession failed', err);
+    }
+  }, [isMock]);
 
   const hasNoSessions = sessions.length === 0;
+
+  const handleFollowUp = useCallback(async (sessionId: string, prompt: string) => {
+    if (!isMock) {
+      const api = window.electronAPI;
+      if (!api) return;
+      try {
+        console.log('[HubApp] followUp', { sessionId, prompt });
+        const result = await api.sessions.resume(sessionId, prompt);
+        if (result?.error) {
+          console.warn('[HubApp] followUp error', { sessionId, error: result.error });
+          updateSession(sessionId, { status: 'stopped' as const, error: result.error });
+        }
+      } catch (err) {
+        console.error('[HubApp] followUp failed', err);
+      }
+    }
+  }, [isMock]);
 
   const handleSelectSession = useCallback((id: string) => {
     const idx = sessions.findIndex((s) => s.id === id);
@@ -163,7 +238,7 @@ export function HubApp(): React.ReactElement {
             className="hub-toolbar__new-btn"
             onClick={() => setCmdBarOpen(true)}
             aria-label="New agent"
-            title="New agent"
+            data-tip={tip('New agent', 'action.create')}
           >
             <PlusIcon />
             <span className="hub-toolbar__new-label">New agent</span>
@@ -174,7 +249,7 @@ export function HubApp(): React.ReactElement {
                 className={`hub-toolbar__view-btn${viewMode === 'dashboard' ? ' hub-toolbar__view-btn--active' : ''}`}
                 onClick={() => setViewMode('dashboard')}
                 aria-label="Dashboard"
-                title="Dashboard"
+                data-tip={tip('Dashboard', 'goto.dashboard')}
               >
                 <DashboardIcon />
               </button>
@@ -182,7 +257,7 @@ export function HubApp(): React.ReactElement {
                 className={`hub-toolbar__view-btn${viewMode === 'grid' ? ' hub-toolbar__view-btn--active' : ''}`}
                 onClick={() => setViewMode('grid')}
                 aria-label="Grid view"
-                title="Grid view"
+                data-tip={tip('Grid view', 'goto.agents')}
               >
                 <GridIcon />
               </button>
@@ -190,7 +265,7 @@ export function HubApp(): React.ReactElement {
                 className={`hub-toolbar__view-btn${viewMode === 'list' ? ' hub-toolbar__view-btn--active' : ''}`}
                 onClick={() => setViewMode('list')}
                 aria-label="List view"
-                title="List view"
+                data-tip={tip('List view', 'goto.list')}
               >
                 <ListIcon />
               </button>
@@ -200,25 +275,35 @@ export function HubApp(): React.ReactElement {
       </header>
 
       {hasNoSessions ? (
-        <div className="hub-empty-state">
+        <div className="hub-empty-state" onClick={() => setCmdBarOpen(true)} style={{ cursor: 'pointer' }}>
           <div className="hub-empty-state__icon" aria-hidden="true">
             <PlusIcon />
           </div>
           <p className="hub-empty-state__title">Start your first agent session</p>
-          <p className="hub-empty-state__body">Type a task below to begin</p>
+          <p className="hub-empty-state__body">
+            Press <kbd className="hub-empty-state__kbd">{vim.keybindings.find((k) => k.id === 'action.create')?.keys[0] ?? 'c'}</kbd> to begin
+          </p>
         </div>
       ) : viewMode === 'dashboard' ? (
-        <Dashboard sessions={sessions} onSwitchToGrid={() => setViewMode('grid')} />
+        <Dashboard
+          sessions={sessions}
+          onSwitchToGrid={() => setViewMode('grid')}
+          onSelectSession={(id) => {
+            handleSelectSession(id);
+            setViewMode('grid');
+          }}
+        />
       ) : viewMode === 'grid' ? (
-        <div className="hub-grouped-grid">
-          {groupSessions(sessions).map(({ group, sessions: groupSessions_ }) => (
-            <div key={group} className="hub-group">
-              <div className="hub-group__header">
-                <span className="hub-group__name">{group}</span>
-                <span className="hub-group__count">{groupSessions_.length}</span>
-              </div>
-              <div className="hub-grid" data-count={Math.min(groupSessions_.length, 4)}>
-                {groupSessions_.map((session) => {
+        (() => {
+          const pageSize = 4;
+          const totalPages = Math.max(1, Math.ceil(sessions.length / pageSize));
+          const safePage = Math.min(gridPage, totalPages - 1);
+          const pageStart = safePage * pageSize;
+          const pageSessions = sessions.slice(pageStart, pageStart + pageSize);
+          return (
+            <div className="hub-grid-container">
+              <div className="hub-grid" data-count={Math.min(pageSessions.length, 4)}>
+                {pageSessions.map((session) => {
                   const globalIdx = sessions.findIndex((s) => s.id === session.id);
                   return (
                     <AgentPane
@@ -226,17 +311,42 @@ export function HubApp(): React.ReactElement {
                       session={session}
                       focused={globalIdx === focusIndex}
                       onRerun={handleCreateSession}
+                      onFollowUp={handleFollowUp}
+                      onDismiss={(id) => {
+                        window.electronAPI?.sessions.viewDetach(id).catch(() => {});
+                        dismissSession(id);
+                      }}
+                      onCancel={(id) => {
+                        window.electronAPI?.sessions.cancel(id).catch(() => {});
+                      }}
                     />
                   );
                 })}
               </div>
+              {totalPages > 1 && (
+                <div className="hub-grid-pages">
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <button
+                      key={i}
+                      className={`hub-grid-pages__dot${i === safePage ? ' hub-grid-pages__dot--active' : ''}`}
+                      onClick={() => setGridPage(i)}
+                      aria-label={`Page ${i + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          );
+        })()
       ) : (
         <ListView
           sessions={sessions}
-          onSelectSession={handleSelectSession}
+          onSelectSession={(id) => {
+            handleSelectSession(id);
+            const idx = sessions.findIndex((s) => s.id === id);
+            if (idx >= 0) setGridPage(Math.floor(idx / 4));
+            setViewMode('grid');
+          }}
           focusIndex={focusIndex}
         />
       )}

@@ -5,8 +5,12 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { HubApp } from './HubApp';
+import { queryClient } from './useSessionsQuery';
+import { ToastProvider } from '@/renderer/components/base/Toast';
 import '@/renderer/design/theme.global.css';
+import '@/renderer/components/base/components.css';
 import './hub.css';
 
 // Apply shell theme — hub uses the same dark palette
@@ -25,6 +29,10 @@ if (!rootEl) throw new Error('[hub] #hub-root element not found');
 
 createRoot(rootEl).render(
   <React.StrictMode>
-    <HubApp />
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <HubApp />
+      </ToastProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );
