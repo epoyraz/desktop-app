@@ -41,6 +41,9 @@ The user's job is simple: spin off tasks and know if they're done or not. If som
 - Verbose metadata — keep it minimal
 - Implementation details of how the agent works — just show results
 
+### Never hardcode shortcuts
+Always read shortcuts from the keybindings config. If the UI says "Press X to do Y," X must come from the user's current keybinding, not a hardcoded string. Users can remap anything.
+
 ### Don't re-explain what's already obvious
 Never add redundant indicators. If a status dot is green and pulsing, don't also add a "LIVE" badge — the visual already communicates it. If the column header says "Running," don't repeat it in the cell. Every label, icon, and indicator must earn its place by adding information the user doesn't already have from context. Redundancy makes the UI look template-generated.
 

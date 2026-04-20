@@ -77,6 +77,11 @@ export function HubApp(): React.ReactElement {
   const updateSession = useUpdateSession();
   const sessions = isMock ? mockSessions : (sessionsQuery.data ?? []);
   const setSessions = isMock ? setMockSessions : () => {};
+
+  useEffect(() => {
+    console.log('[HubApp] sessions changed', { count: sessions.length, ts: Date.now(), ids: sessions.map((s) => s.id.slice(0, 8)) });
+  }, [sessions.length]);
+
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [cmdBarOpen, setCmdBarOpen] = useState(false);
   const [cmdBarMode, setCmdBarMode] = useState<'create' | 'followup'>('create');
@@ -139,6 +144,7 @@ export function HubApp(): React.ReactElement {
       if (helpOpen) { setHelpOpen(false); showBrowserViews(); return; }
       if (settingsOpen) { setSettingsOpen(false); showBrowserViews(); return; }
       if (cmdBarOpen) { setCmdBarOpen(false); showBrowserViews(); return; }
+      setFocusIndex(-1);
     },
   }), [sessions, focusIndex, helpOpen, settingsOpen, cmdBarOpen]);
 
@@ -490,6 +496,15 @@ export function HubApp(): React.ReactElement {
           }
         }}
         mode={cmdBarMode}
+        sessions={sessions}
+        onSelectSession={(id) => {
+          window.electronAPI?.sessions.unhide(id).catch(() => {});
+          handleSelectSession(id);
+          sessionsQuery.refetch();
+          const idx = sessions.findIndex((s) => s.id === id);
+          if (idx >= 0) setGridPage(Math.floor(idx / 4));
+          setViewMode('grid');
+        }}
       />
 
       <KeybindingsOverlay

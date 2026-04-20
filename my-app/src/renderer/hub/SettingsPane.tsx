@@ -1,4 +1,5 @@
 import React from 'react';
+import { ConnectionsPane } from './ConnectionsPane';
 import type { ActionId, KeyBinding } from './keybindings';
 
 interface SettingsPaneProps {
@@ -26,6 +27,10 @@ export function SettingsPane({ open, onClose, keybindings, overrides, onResetAll
           </button>
         </div>
         <div className="settings-pane__body">
+          <div className="settings-pane__section">
+            <span className="settings-pane__section-title">Connections</span>
+            <ConnectionsPane embedded />
+          </div>
           <div className="settings-pane__section">
             <span className="settings-pane__section-title">Keybindings</span>
             {keybindings.map((kb) => {
