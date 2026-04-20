@@ -25,6 +25,8 @@ declare global {
       importChromeProfileCookies: (profileDir: string) => Promise<CookieImportResult>;
       saveApiKey: (key: string) => Promise<void>;
       testApiKey: (key: string) => Promise<{ success: boolean; error?: string }>;
+      listenShortcut: () => Promise<{ ok: boolean }>;
+      onShortcutActivated: (cb: () => void) => () => void;
       complete: () => Promise<void>;
       whatsapp: {
         connect: () => Promise<{ status: string }>;
@@ -37,7 +39,7 @@ declare global {
   }
 }
 
-type Step = 'profile' | 'apikey' | 'whatsapp';
+type Step = 'profile' | 'apikey' | 'shortcut' | 'whatsapp';
 
 export function OnboardingApp() {
   const [step, setStep] = useState<Step>('profile');
@@ -95,6 +97,17 @@ export function OnboardingApp() {
     }
   }, [apiKey]);
 
+  const [shortcutActivated, setShortcutActivated] = useState(false);
+
+  useEffect(() => {
+    if (step !== 'shortcut') return;
+    window.onboardingAPI.listenShortcut();
+    const unsub = window.onboardingAPI.onShortcutActivated(() => {
+      setShortcutActivated(true);
+    });
+    return unsub;
+  }, [step]);
+
   const [waStatus, setWaStatus] = useState<string>('disconnected');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [waIdentity, setWaIdentity] = useState<string | null>(null);
@@ -104,7 +117,7 @@ export function OnboardingApp() {
     setSaving(true);
     try {
       await window.onboardingAPI.saveApiKey(apiKey.trim());
-      setStep('whatsapp');
+      setStep('shortcut');
     } catch (err) {
       console.error('[onboarding] save key failed', err);
     } finally {
@@ -149,7 +162,9 @@ export function OnboardingApp() {
         <div className="step-indicator">
           <div className={`step-dot ${step === 'profile' ? 'active' : 'done'}`} />
           <div className="step-line" />
-          <div className={`step-dot ${step === 'apikey' ? 'active' : step === 'whatsapp' ? 'done' : ''}`} />
+          <div className={`step-dot ${step === 'apikey' ? 'active' : step === 'profile' ? '' : 'done'}`} />
+          <div className="step-line" />
+          <div className={`step-dot ${step === 'shortcut' ? 'active' : (step === 'whatsapp' ? 'done' : '')}`} />
           <div className="step-line" />
           <div className={`step-dot ${step === 'whatsapp' ? 'active' : ''}`} />
         </div>
@@ -316,6 +331,50 @@ export function OnboardingApp() {
           </div>
         )}
 
+        {step === 'shortcut' && (
+          <div className="step-panel">
+            <h1 className="step-title">Enter your first task</h1>
+            <p className="step-subtitle">
+              This shortcut works from anywhere on your system. Try it now.
+            </p>
+
+            <div className="shortcut-demo">
+              {shortcutActivated ? (
+                <div className="shortcut-success">
+                  <div className="shortcut-success-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <p className="shortcut-success-text">Shortcut registered</p>
+                </div>
+              ) : (
+                <div className="shortcut-keys">
+                  <kbd className="kbd">&#8984;</kbd>
+                  <span className="kbd-plus">+</span>
+                  <kbd className="kbd">&#8679;</kbd>
+                  <span className="kbd-plus">+</span>
+                  <kbd className="kbd">Space</kbd>
+                </div>
+              )}
+            </div>
+
+            {!shortcutActivated && (
+              <p className="shortcut-hint">Press the keys above to activate</p>
+            )}
+
+            <div className="apikey-actions">
+              <button className="btn btn-primary" onClick={() => setStep('whatsapp')}>
+                {shortcutActivated ? 'Continue' : 'Skip for now'}
+              </button>
+            </div>
+
+            <button className="back-btn" onClick={() => setStep('apikey')}>
+              Back
+            </button>
+          </div>
+        )}
+
         {step === 'whatsapp' && (
           <div className="step-panel">
             <h1 className="step-title">Connect WhatsApp</h1>
@@ -367,7 +426,7 @@ export function OnboardingApp() {
               </button>
             </div>
 
-            <button className="back-btn" onClick={() => setStep('apikey')}>
+            <button className="back-btn" onClick={() => setStep('shortcut')}>
               Back
             </button>
           </div>

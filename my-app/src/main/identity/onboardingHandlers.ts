@@ -1,7 +1,9 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, globalShortcut } from 'electron';
 import { mainLogger } from '../logger';
 import { AccountStore } from './AccountStore';
 import { assertString } from '../ipc-validators';
+
+const GLOBAL_SHORTCUT = 'CommandOrControl+Shift+Space';
 
 const ANTHROPIC_SERVICE = 'com.agenticbrowser.anthropic';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -96,6 +98,20 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
     }
   });
 
+  ipcMain.handle('onboarding:listen-shortcut', () => {
+    mainLogger.info('onboardingHandlers.listenShortcut');
+    globalShortcut.unregister(GLOBAL_SHORTCUT);
+    const ok = globalShortcut.register(GLOBAL_SHORTCUT, () => {
+      mainLogger.info('onboardingHandlers.shortcutFired');
+      if (!onboardingWindow.isDestroyed()) {
+        onboardingWindow.webContents.send('shortcut-activated');
+      }
+      globalShortcut.unregister(GLOBAL_SHORTCUT);
+    });
+    mainLogger.info('onboardingHandlers.listenShortcut.registered', { ok });
+    return { ok };
+  });
+
   ipcMain.handle('onboarding:complete', async () => {
     mainLogger.info('onboardingHandlers.complete');
 
@@ -128,6 +144,8 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
 export function unregisterOnboardingHandlers(): void {
   ipcMain.removeHandler('onboarding:save-api-key');
   ipcMain.removeHandler('onboarding:test-api-key');
+  ipcMain.removeHandler('onboarding:listen-shortcut');
   ipcMain.removeHandler('onboarding:complete');
+  globalShortcut.unregister(GLOBAL_SHORTCUT);
   mainLogger.info('onboardingHandlers.unregistered');
 }

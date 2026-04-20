@@ -30,6 +30,15 @@ const onboardingAPI = {
   testApiKey: (key: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('onboarding:test-api-key', key),
 
+  listenShortcut: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('onboarding:listen-shortcut'),
+
+  onShortcutActivated: (cb: () => void): (() => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('shortcut-activated', handler);
+    return () => ipcRenderer.removeListener('shortcut-activated', handler);
+  },
+
   complete: (): Promise<void> =>
     ipcRenderer.invoke('onboarding:complete'),
 
