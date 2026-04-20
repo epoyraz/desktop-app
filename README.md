@@ -35,9 +35,9 @@ Requires [Task](https://taskfile.dev) (`brew install go-task`).
 ```bash
 task up    # Install deps, build agent image, start the app
 task       # See all commands
+```
 
 ## Project structure
-
 ```
 my-app/
   src/
