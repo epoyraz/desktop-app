@@ -11,6 +11,59 @@ import { generateActivityData, getStatusBreakdown, MOCK_STATS } from './mock-met
 import type { AgentSession } from './types';
 import type { ActivityPoint } from './mock-metrics';
 
+interface StatusBreakdownEntry {
+  status: string;
+  count: number;
+  label: string;
+}
+
+function deriveActivityFromSessions(sessions: AgentSession[]): ActivityPoint[] {
+  const now = Date.now();
+  const HOUR = 3600 * 1000;
+  const buckets = new Map<number, { sessions: number; tokens: number }>();
+
+  for (let i = 7 * 24; i >= 0; i--) {
+    const bucketTime = now - i * HOUR;
+    const bucketHour = Math.floor(bucketTime / HOUR) * HOUR;
+    buckets.set(bucketHour, { sessions: 0, tokens: 0 });
+  }
+
+  for (const s of sessions) {
+    const bucketHour = Math.floor(s.createdAt / HOUR) * HOUR;
+    const entry = buckets.get(bucketHour);
+    if (entry) {
+      entry.sessions += 1;
+    }
+  }
+
+  return Array.from(buckets, ([time, v]) => ({
+    time,
+    sessions: v.sessions,
+    tokens: v.tokens,
+  })).sort((a, b) => a.time - b.time);
+}
+
+function deriveBreakdown(sessions: AgentSession[]): StatusBreakdownEntry[] {
+  const counts: Record<string, number> = { stopped: 0, running: 0, stuck: 0, draft: 0, idle: 0 };
+  for (const s of sessions) {
+    if (s.status in counts) counts[s.status] += 1;
+  }
+  return [
+    { status: 'stopped', count: counts.stopped, label: 'Stopped' },
+    { status: 'running', count: counts.running, label: 'Running' },
+    { status: 'stuck', count: counts.stuck, label: 'Stuck' },
+    { status: 'idle', count: counts.idle, label: 'Idle' },
+    { status: 'draft', count: counts.draft, label: 'Draft' },
+  ];
+}
+
+function countSessionsToday(sessions: AgentSession[]): number {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const threshold = startOfDay.getTime();
+  return sessions.filter((s) => s.createdAt >= threshold).length;
+}
+
 const CHART_MARGIN = { top: 16, right: 0, bottom: 28, left: 0 };
 
 function formatNumber(n: number): string {
@@ -28,8 +81,7 @@ function formatElapsed(createdAt: number): string {
   return `${hours}h`;
 }
 
-function ActivityChart({ width, height }: { width: number; height: number }): React.ReactElement | null {
-  const data = useMemo(() => generateActivityData(7), []);
+function ActivityChart({ width, height, data }: { width: number; height: number; data: ActivityPoint[] }): React.ReactElement | null {
   const [hover, setHover] = useState<ActivityPoint | null>(null);
   const [hoverX, setHoverX] = useState(0);
 
@@ -166,15 +218,31 @@ function ActivityChart({ width, height }: { width: number; height: number }): Re
 interface DashboardProps {
   sessions: AgentSession[];
   onSwitchToGrid: () => void;
+  onSelectSession?: (id: string) => void;
 }
 
-export function Dashboard({ sessions, onSwitchToGrid }: DashboardProps): React.ReactElement {
+export function Dashboard({ sessions, onSwitchToGrid, onSelectSession }: DashboardProps): React.ReactElement {
+  const isMock = import.meta.env.VITE_MOCK_MODE === '1';
+
   const runningCount = sessions.filter((s) => s.status === 'running').length;
   const stuckCount = sessions.filter((s) => s.status === 'stuck').length;
   const stoppedCount = sessions.filter((s) => s.status === 'stopped').length;
 
-  const breakdown = useMemo(() => getStatusBreakdown(MOCK_STATS.totalSessions), []);
+  const breakdown = useMemo(
+    () => isMock ? getStatusBreakdown(MOCK_STATS.totalSessions) : deriveBreakdown(sessions),
+    [isMock, sessions],
+  );
   const total = breakdown.reduce((sum, b) => sum + b.count, 0);
+
+  const activityData = useMemo(
+    () => isMock ? generateActivityData(7) : deriveActivityFromSessions(sessions),
+    [isMock, sessions],
+  );
+
+  const todayCount = useMemo(
+    () => isMock ? MOCK_STATS.sessionsToday : countSessionsToday(sessions),
+    [isMock, sessions],
+  );
 
   const recentSessions = sessions.slice(0, 6);
 
@@ -201,11 +269,7 @@ export function Dashboard({ sessions, onSwitchToGrid }: DashboardProps): React.R
         </div>
         <div className="dashboard__stat">
           <span className="dashboard__stat-label">Today</span>
-          <span className="dashboard__stat-value">{MOCK_STATS.sessionsToday}</span>
-        </div>
-        <div className="dashboard__stat">
-          <span className="dashboard__stat-label">Tokens used</span>
-          <span className="dashboard__stat-value">{formatNumber(MOCK_STATS.totalTokens)}</span>
+          <span className="dashboard__stat-value">{todayCount}</span>
         </div>
       </div>
 
@@ -216,7 +280,7 @@ export function Dashboard({ sessions, onSwitchToGrid }: DashboardProps): React.R
           </div>
           <div className="dashboard__chart-area">
             <ParentSize>
-              {({ width, height }) => <ActivityChart width={width} height={height} />}
+              {({ width, height }) => <ActivityChart width={width} height={height} data={activityData} />}
             </ParentSize>
           </div>
         </div>
@@ -260,7 +324,14 @@ export function Dashboard({ sessions, onSwitchToGrid }: DashboardProps): React.R
         </div>
         <div className="dashboard__recent-list">
           {recentSessions.map((session) => (
-            <div key={session.id} className="dashboard__recent-row">
+            <div
+              key={session.id}
+              className="dashboard__recent-row"
+              onClick={() => onSelectSession?.(session.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') onSelectSession?.(session.id); }}
+            >
               <span className={`dashboard__recent-dot dashboard__recent-dot--${session.status}`} />
               <span className="dashboard__recent-status">{STATUS_LABEL[session.status]}</span>
               {session.group && <span className="dashboard__recent-group">{session.group}</span>}
