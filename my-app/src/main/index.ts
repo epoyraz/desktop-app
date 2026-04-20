@@ -206,6 +206,7 @@ app.whenReady().then(async () => {
   const activeAgents = new Map<string, AbortController>();
   const sessionMessages = new Map<string, Array<{ role: string; content: unknown }>>();
   const steerQueues = new Map<string, string[]>();
+  const startingSessionIds = new Set<string>();
 
   // pill:submit — runs the HL in-process agent
   ipcMain.handle('pill:submit', async (_event, { prompt }: { prompt: string }) => {
@@ -303,11 +304,19 @@ app.whenReady().then(async () => {
   });
 
   async function startSessionWithAgent(id: string): Promise<void> {
+    if (startingSessionIds.has(id)) {
+      mainLogger.warn('main.startSessionWithAgent.alreadyStarting', { id });
+      return;
+    }
+    startingSessionIds.add(id);
+    const t0 = Date.now();
     mainLogger.info('main.startSessionWithAgent', { id });
 
     const abortController = sessionManager.startSession(id);
+    mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'startSession', ms: Date.now() - t0 });
 
     const apiKey = await getApiKey({ accountEmail: accountStore.load()?.email });
+    mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'getApiKey', ms: Date.now() - t0 });
     if (!apiKey) {
       sessionManager.failSession(id, 'No API key configured');
       mainLogger.warn('main.startSessionWithAgent.noApiKey', { id });
@@ -315,15 +324,25 @@ app.whenReady().then(async () => {
     }
 
     const view = browserPool.create(id);
+    mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'poolCreate', ms: Date.now() - t0 });
     if (!view) {
       sessionManager.failSession(id, `Browser pool full (max ${browserPool.activeCount}), session queued`);
       mainLogger.warn('main.startSessionWithAgent.poolFull', { id, stats: browserPool.getStats() });
       return;
     }
 
+    if (shellWindow && !shellWindow.isDestroyed()) {
+      browserPool.attachToWindow(id, shellWindow, { x: 0, y: 0, width: 0, height: 0 });
+    }
+    mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'attach', ms: Date.now() - t0 });
+
+    await view.webContents.loadURL('about:blank');
+    mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'loadBlank', ms: Date.now() - t0 });
+
     let ctx;
     try {
       ctx = await createContext({ name: id, webContents: view.webContents });
+      mainLogger.info('main.startSessionWithAgent.timing', { id, step: 'cdpAttach', ms: Date.now() - t0 });
       mainLogger.info('main.startSessionWithAgent.cdpAttached', { id, transport: ctx.cdp.transport });
     } catch (err) {
       const msg = `CDP context creation failed: ${(err as Error).message}`;
@@ -361,6 +380,8 @@ app.whenReady().then(async () => {
       sessionManager.failSession(id, err.message);
       browserPool.destroy(id, shellWindow ?? undefined);
     }).finally(() => {
+      steerQueues.delete(id);
+      startingSessionIds.delete(id);
       mainLogger.info('main.startSessionWithAgent.finished', { id, poolStats: browserPool.getStats() });
     });
   }
@@ -444,6 +465,7 @@ app.whenReady().then(async () => {
       sessionManager.failSession(validatedId, err.message);
       browserPool.destroy(validatedId, shellWindow ?? undefined);
     }).finally(() => {
+      steerQueues.delete(validatedId);
       mainLogger.info('main.sessions:resume.agentFinished', { id: validatedId, poolStats: browserPool.getStats() });
     });
 
@@ -508,6 +530,8 @@ app.whenReady().then(async () => {
       mainLogger.error('main.sessions:rerun.agentError', { id: validatedId, error: err.message });
       sessionManager.failSession(validatedId, err.message);
       browserPool.destroy(validatedId, shellWindow ?? undefined);
+    }).finally(() => {
+      steerQueues.delete(validatedId);
     });
 
     return { rerun: true };

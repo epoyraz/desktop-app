@@ -39,6 +39,8 @@ export class SessionManager extends EventEmitter {
         error: row.error ?? undefined,
         group: row.group_name ?? undefined,
         hidden: row.hidden === 1,
+        originChannel: row.origin_channel ?? undefined,
+        originConversationId: row.origin_conversation_id ?? undefined,
       };
       this.sessions.set(row.id, session);
     }
@@ -61,7 +63,7 @@ export class SessionManager extends EventEmitter {
 
   // -- public API -----------------------------------------------------------
 
-  createSession(prompt: string): string {
+  createSession(prompt: string, opts?: { originChannel?: string; originConversationId?: string }): string {
     const id = randomUUID();
     const now = Date.now();
     const session: AgentSession = {
@@ -70,12 +72,18 @@ export class SessionManager extends EventEmitter {
       status: 'draft',
       createdAt: now,
       output: [],
+      originChannel: opts?.originChannel,
+      originConversationId: opts?.originConversationId,
     };
     this.sessions.set(id, session);
-    this.db.insertSession({ id, prompt, status: 'draft', createdAt: now });
-    mainLogger.info('SessionManager.createSession', { id, promptLength: prompt.length });
+    this.db.insertSession({ id, prompt, status: 'draft', createdAt: now, originChannel: opts?.originChannel, originConversationId: opts?.originConversationId });
+    mainLogger.info('SessionManager.createSession', { id, promptLength: prompt.length, originChannel: opts?.originChannel ?? null });
     this.emitEvent('session-created', { ...session });
     return id;
+  }
+
+  getSessionOrigin(id: string): { originChannel: string | null; originConversationId: string | null } {
+    return this.db.getSessionOrigin(id);
   }
 
   startSession(id: string): AbortController {
@@ -241,6 +249,8 @@ export class SessionManager extends EventEmitter {
     session.output = [];
     session.error = undefined;
     session.status = 'running';
+    session.createdAt = Date.now();
+    this.db.updateCreatedAt(id, session.createdAt);
     this.db.updateSessionStatus(id, 'running');
     this.db.saveMessages(id, []);
     this.db.clearEvents(id);
@@ -249,7 +259,7 @@ export class SessionManager extends EventEmitter {
     this.abortControllers.set(id, abortController);
     this.resetStuckTimer(id);
 
-    mainLogger.info('SessionManager.rerunSession', { id, prompt: session.prompt.slice(0, 50) });
+    mainLogger.info('SessionManager.rerunSession', { id, promptLength: session.prompt.length });
     this.emitEvent('session-updated', { ...session });
     return abortController;
   }

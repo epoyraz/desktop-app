@@ -10,7 +10,7 @@
  *   events while the model writes; the final Message (with tool_use blocks) is
  *   awaited via `stream.finalMessage()` before we dispatch tools.
  *
- * Loop bound: MAX_ITERATIONS (25). An AbortSignal cancels the in-flight request.
+ * Safety bound: MAX_ITERATIONS (200) prevents runaway loops. An AbortSignal cancels the in-flight request.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -23,7 +23,8 @@ import { HL_TOOLS, HL_TOOL_BY_NAME } from './tools';
 import { mainLogger } from '../logger';
 
 const DEFAULT_MODEL = process.env.HL_MODEL ?? 'claude-opus-4-7';
-const MAX_TOKENS = 4096;
+const MAX_TOKENS = parseInt(process.env.HL_MAX_TOKENS ?? '4096', 10);
+const MAX_ITERATIONS = parseInt(process.env.HL_MAX_ITERATIONS ?? '200', 10);
 
 export type HlEvent =
   | { type: 'thinking';   text: string }
@@ -135,6 +136,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<MessageParam[]> {
   ];
 
   for (let iter = 1; ; iter++) {
+    if (iter > MAX_ITERATIONS) {
+      mainLogger.warn('hl.agent.maxIterations', { iter, max: MAX_ITERATIONS });
+      onEvent({ type: 'done', summary: `Reached maximum iterations (${MAX_ITERATIONS})`, iterations: iter });
+      return messages;
+    }
     if (signal?.aborted) { onEvent({ type: 'done', summary: 'Halted by user', iterations: iter }); return messages; }
 
     const queued = opts.drainQueue?.() ?? null;
