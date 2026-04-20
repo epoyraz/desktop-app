@@ -27,7 +27,7 @@ export class SessionManager extends EventEmitter {
       mainLogger.warn('SessionManager.loadPersistedSessions.recovered', { count: recoveredCount });
     }
 
-    const rows = this.db.listSessions({ limit: 50, includeHidden: true });
+    const rows = this.db.listSessions({ limit: 50 });
     for (const row of rows) {
       const events = this.db.getEvents(row.id);
       const session: AgentSession = {
