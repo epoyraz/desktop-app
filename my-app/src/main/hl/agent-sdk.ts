@@ -7,14 +7,34 @@ import type { HlEvent } from './agent';
 
 export async function getCdpWsUrl(webContents: WebContents): Promise<string> {
   const port = getAnnouncedCdpPort();
-  const pid = webContents.getOSProcessId();
+  const wcId = webContents.id;
+  const url = webContents.getURL();
+  const title = webContents.getTitle();
+
   const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
-  const targets = (await resp.json()) as Array<{ id: string; webSocketDebuggerUrl: string; type: string }>;
-  const target = targets.find((t) => t.type === 'page') ?? targets[0];
-  if (!target?.webSocketDebuggerUrl) {
-    throw new Error(`No CDP target found on port ${port} for pid ${pid}`);
+  const targets = (await resp.json()) as Array<{ id: string; url: string; title: string; webSocketDebuggerUrl: string; type: string }>;
+
+  // Match by URL — the session's WebContentsView has a unique URL after loadURL
+  let target = targets.find((t) => t.type === 'page' && t.url === url && t.title === title);
+  // Fallback: match about:blank pages (freshly created sessions)
+  if (!target) target = targets.find((t) => t.type === 'page' && t.url === 'about:blank');
+  // Last resort: use the webContents debugger to get the target ID directly
+  if (!target) {
+    try {
+      if (!webContents.debugger.isAttached()) webContents.debugger.attach('1.3');
+      const info = await webContents.debugger.sendCommand('Target.getTargetInfo') as { targetInfo?: { targetId: string } };
+      const targetId = info.targetInfo?.targetId;
+      if (targetId) {
+        target = targets.find((t) => t.id === targetId);
+      }
+      webContents.debugger.detach();
+    } catch { /* debugger may already be attached */ }
   }
-  mainLogger.info('agentSdk.getCdpWsUrl', { port, pid, targetId: target.id });
+
+  if (!target?.webSocketDebuggerUrl) {
+    throw new Error(`No CDP target found on port ${port} for wcId ${wcId}, url=${url}`);
+  }
+  mainLogger.info('agentSdk.getCdpWsUrl', { port, wcId, targetId: target.id, targetUrl: target.url.slice(0, 50) });
   return target.webSocketDebuggerUrl;
 }
 
