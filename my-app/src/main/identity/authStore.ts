@@ -1,0 +1,126 @@
+/**
+ * Stores either an Anthropic API key or a Claude Code OAuth credential set.
+ * Handles auto-refresh of OAuth access tokens.
+ *
+ * Storage layout in macOS Keychain (via keytar):
+ *   service = "com.agenticbrowser.anthropic",       account = "default"  -> API key (sk-ant-api03-...)
+ *   service = "com.agenticbrowser.anthropic-oauth", account = "default"  -> JSON credentials
+ */
+
+import { mainLogger } from '../logger';
+import {
+  refreshClaudeOAuth,
+  isExpiringSoon,
+  type ClaudeOAuthCredentials,
+} from './claudeCodeAuth';
+
+export const API_KEY_SERVICE = 'com.agenticbrowser.anthropic';
+export const OAUTH_SERVICE = 'com.agenticbrowser.anthropic-oauth';
+const DEFAULT_ACCOUNT = 'default';
+
+export type ResolvedAuth =
+  | { type: 'apiKey'; value: string }
+  | { type: 'oauth'; value: string; subscriptionType?: string }
+  | null;
+
+interface KeytarLike {
+  getPassword(service: string, account: string): Promise<string | null>;
+  setPassword(service: string, account: string, password: string): Promise<void>;
+  deletePassword(service: string, account: string): Promise<boolean>;
+}
+
+function getKeytar(): KeytarLike | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('keytar') as KeytarLike;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveApiKey(key: string): Promise<void> {
+  const keytar = getKeytar();
+  if (!keytar) throw new Error('keytar unavailable');
+  await keytar.setPassword(API_KEY_SERVICE, DEFAULT_ACCOUNT, key);
+  await keytar.deletePassword(OAUTH_SERVICE, DEFAULT_ACCOUNT).catch(() => {});
+  mainLogger.info('authStore.saveApiKey.ok');
+}
+
+export async function saveOAuth(creds: ClaudeOAuthCredentials): Promise<void> {
+  const keytar = getKeytar();
+  if (!keytar) throw new Error('keytar unavailable');
+  await keytar.setPassword(OAUTH_SERVICE, DEFAULT_ACCOUNT, JSON.stringify(creds));
+  await keytar.deletePassword(API_KEY_SERVICE, DEFAULT_ACCOUNT).catch(() => {});
+  mainLogger.info('authStore.saveOAuth.ok', {
+    subscriptionType: creds.subscriptionType,
+    expiresAt: creds.expiresAt,
+  });
+}
+
+export async function clearAuth(): Promise<void> {
+  const keytar = getKeytar();
+  if (!keytar) return;
+  await keytar.deletePassword(API_KEY_SERVICE, DEFAULT_ACCOUNT).catch(() => {});
+  await keytar.deletePassword(OAUTH_SERVICE, DEFAULT_ACCOUNT).catch(() => {});
+  mainLogger.info('authStore.clearAuth');
+}
+
+async function loadOAuth(): Promise<ClaudeOAuthCredentials | null> {
+  const keytar = getKeytar();
+  if (!keytar) return null;
+  try {
+    const raw = await keytar.getPassword(OAUTH_SERVICE, DEFAULT_ACCOUNT);
+    if (!raw) return null;
+    return JSON.parse(raw) as ClaudeOAuthCredentials;
+  } catch (err) {
+    mainLogger.warn('authStore.loadOAuth.failed', { error: (err as Error).message });
+    return null;
+  }
+}
+
+async function loadApiKey(): Promise<string | null> {
+  const keytar = getKeytar();
+  if (!keytar) return null;
+  try {
+    return (await keytar.getPassword(API_KEY_SERVICE, DEFAULT_ACCOUNT)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the current auth. Prefers OAuth (if stored and refreshable), falls
+ * back to API key, then environment ANTHROPIC_API_KEY.
+ */
+export async function resolveAuth(): Promise<ResolvedAuth> {
+  const oauth = await loadOAuth();
+  if (oauth) {
+    let current = oauth;
+    if (isExpiringSoon(current)) {
+      mainLogger.info('authStore.resolveAuth.refreshing', {
+        expiresAt: current.expiresAt,
+      });
+      try {
+        current = await refreshClaudeOAuth(current.refreshToken);
+        await saveOAuth(current);
+      } catch (err) {
+        mainLogger.warn('authStore.resolveAuth.refreshFailed', {
+          error: (err as Error).message,
+        });
+      }
+    }
+    return {
+      type: 'oauth',
+      value: current.accessToken,
+      subscriptionType: current.subscriptionType,
+    };
+  }
+
+  const apiKey = await loadApiKey();
+  if (apiKey) return { type: 'apiKey', value: apiKey };
+
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (envKey) return { type: 'apiKey', value: envKey };
+
+  return null;
+}

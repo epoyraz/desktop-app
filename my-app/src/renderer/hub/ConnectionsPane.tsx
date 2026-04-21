@@ -1,6 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import anthropicLogo from './anthropic-logo.svg';
+import claudeCodeLogo from './claude-code-logo.svg';
 
 type WaStatus = 'disconnected' | 'connecting' | 'qr_ready' | 'connected' | 'error';
+type AuthType = 'oauth' | 'apiKey' | 'none';
+interface AuthStatus {
+  type: AuthType;
+  masked?: string;
+  subscriptionType?: string | null;
+  expiresAt?: number;
+}
 
 interface ConnectionsPaneProps {
   embedded?: boolean;
@@ -12,8 +21,8 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
   const [waDetail, setWaDetail] = useState<string | undefined>();
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
-  const [keyPresent, setKeyPresent] = useState(false);
-  const [keyMasked, setKeyMasked] = useState<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>({ type: 'none' });
+  const [claudeCodeAvailable, setClaudeCodeAvailable] = useState<{ available: boolean; subscriptionType?: string | null }>({ available: false });
   const [editing, setEditing] = useState(false);
   const [draftKey, setDraftKey] = useState('');
   const [keyStatus, setKeyStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
@@ -22,10 +31,22 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
   const refreshKey = useCallback(async () => {
     const api = window.electronAPI;
     if (!api?.settings?.apiKey) return;
-    const r = await api.settings.apiKey.getMasked();
-    setKeyPresent(r.present);
-    setKeyMasked(r.masked);
+    const status = await api.settings.apiKey.getStatus();
+    setAuthStatus(status);
+    const cc = await api.settings.claudeCode?.available();
+    if (cc) setClaudeCodeAvailable(cc);
   }, []);
+
+  const handleUseClaudeCode = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.claudeCode) return;
+    try {
+      await api.settings.claudeCode.use();
+      await refreshKey();
+    } catch (err) {
+      setKeyError((err as Error).message);
+    }
+  }, [refreshKey]);
 
   useEffect(() => {
     refreshKey();
@@ -133,32 +154,51 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
 
       <div className="conn-card">
         <div className="conn-card__header">
-          <div className="conn-card__icon conn-card__icon--letter">A</div>
+          <img
+            className="conn-card__icon"
+            src={authStatus.type === 'oauth' ? claudeCodeLogo : anthropicLogo}
+            alt=""
+          />
           <div className="conn-card__info">
             <div className="conn-card__title-row">
-              <span className="conn-card__name">Anthropic API key</span>
-              <span className={`conn-card__dot ${keyPresent ? 'conn-card__dot--connected' : 'conn-card__dot--disconnected'}`} />
+              <span className="conn-card__name">Anthropic</span>
+              <span className={`conn-card__dot ${authStatus.type !== 'none' ? 'conn-card__dot--connected' : 'conn-card__dot--disconnected'}`} />
             </div>
             <span className="conn-card__subtitle">
               {editing
                 ? 'Enter a new key — it will be tested before saving'
-                : keyPresent && keyMasked
-                ? keyMasked
-                : 'No key configured'}
+                : authStatus.type === 'oauth'
+                ? `Signed in with Claude ${authStatus.subscriptionType === 'max' ? 'Max' : authStatus.subscriptionType === 'pro' ? 'Pro' : 'subscription'}`
+                : authStatus.type === 'apiKey' && authStatus.masked
+                ? `API key · ${authStatus.masked}`
+                : 'Not connected'}
             </span>
           </div>
           <div className="conn-card__actions">
-            {!editing && (
+            {!editing && authStatus.type === 'none' && claudeCodeAvailable.available && (
+              <button className="conn-card__btn conn-card__btn--primary" onClick={handleUseClaudeCode}>
+                Sign in with Claude
+              </button>
+            )}
+            {!editing && authStatus.type === 'none' && (
+              <button
+                className="conn-card__btn conn-card__btn--secondary"
+                onClick={() => { setEditing(true); setDraftKey(''); setKeyStatus('idle'); setKeyError(null); }}
+              >
+                Add API key
+              </button>
+            )}
+            {!editing && authStatus.type === 'apiKey' && (
               <button
                 className="conn-card__btn conn-card__btn--primary"
                 onClick={() => { setEditing(true); setDraftKey(''); setKeyStatus('idle'); setKeyError(null); }}
               >
-                {keyPresent ? 'Change' : 'Add key'}
+                Change
               </button>
             )}
-            {!editing && keyPresent && (
+            {!editing && authStatus.type !== 'none' && (
               <button className="conn-card__btn conn-card__btn--secondary" onClick={handleDeleteKey}>
-                Remove
+                Sign out
               </button>
             )}
             {editing && (

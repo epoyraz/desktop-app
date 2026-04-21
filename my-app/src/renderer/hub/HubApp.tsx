@@ -8,6 +8,7 @@ import { SettingsPane } from './SettingsPane';
 import { useVimKeys } from './useVimKeys';
 import { useSessionsQuery, useDismissSession, useUpdateSession } from './useSessionsQuery';
 import { MemoryIndicator } from './MemoryIndicator';
+import { Sidebar } from './Sidebar';
 import { MOCK_SESSIONS } from './mock-data';
 import type { AgentSession, HlEvent } from './types';
 import type { ActionId } from './keybindings';
@@ -153,6 +154,11 @@ export function HubApp(): React.ReactElement {
     setCmdBarVisible(false);
     try { window.localStorage.setItem('hub-cmdbar-visible', '0'); } catch {}
   }, []);
+
+  const visibleSessionCount = sessions.filter((s) => !s.hidden).length;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('pane:layout-change'));
+  }, [visibleSessionCount, gridColumns, gridPage, viewMode]);
 
   const vimHandlers = useMemo<Partial<Record<ActionId, () => void>>>(() => ({
     'nav.down': () => {
@@ -468,6 +474,8 @@ export function HubApp(): React.ReactElement {
     setGridPage(clamped);
   }, [gridTotalPages, gridPageSize, sessions]);
 
+  const selectedSessionId = sessions[focusIndex]?.id ?? null;
+
   return (
     <div className="hub-root">
       <header className="hub-toolbar">
@@ -584,6 +592,16 @@ export function HubApp(): React.ReactElement {
         </div>
       </header>
 
+      <div className="hub-body">
+      <Sidebar
+        selectedId={selectedSessionId}
+        onSelect={(id) => {
+          handleSelectSession(id);
+          if (viewMode === 'dashboard') setViewMode('grid');
+        }}
+        onNewAgent={() => openPill()}
+      />
+      <div className="hub-main">
       {viewMode === 'dashboard' ? (
         <Dashboard
           sessions={sessions}
@@ -644,6 +662,11 @@ export function HubApp(): React.ReactElement {
                       onOpenFollowUp={() => {
                         window.electronAPI?.pill.openFollowUp(session.id, session.prompt);
                       }}
+                      onOpenSettings={() => {
+                        window.electronAPI?.pill.hide();
+                        hideBrowserViews();
+                        setSettingsOpen(true);
+                      }}
                       followUpShortcut={shortcutFor('action.followUp')}
                       cycleShortcut={shortcutFor('view.cycle')}
                     />
@@ -667,6 +690,9 @@ export function HubApp(): React.ReactElement {
           focusIndex={focusIndex}
         />
       )}
+
+      </div>
+      </div>
 
       {vim.chordPrefix && (
         <div className="chord-indicator">

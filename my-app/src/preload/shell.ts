@@ -26,11 +26,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apiKey: {
       getMasked: (): Promise<{ present: boolean; masked: string | null }> =>
         ipcRenderer.invoke('settings:api-key:get-masked'),
+      getStatus: (): Promise<{ type: 'oauth' | 'apiKey' | 'none'; masked?: string; subscriptionType?: string | null; expiresAt?: number }> =>
+        ipcRenderer.invoke('settings:api-key:get-status'),
       save: (key: string): Promise<void> =>
         ipcRenderer.invoke('settings:api-key:save', key),
       test: (key: string): Promise<{ success: boolean; error?: string }> =>
         ipcRenderer.invoke('settings:api-key:test', key),
       delete: (): Promise<void> => ipcRenderer.invoke('settings:api-key:delete'),
+    },
+    claudeCode: {
+      available: (): Promise<{ available: boolean; subscriptionType?: string | null }> =>
+        ipcRenderer.invoke('settings:claude-code:available'),
+      use: (): Promise<{ subscriptionType: string | null }> =>
+        ipcRenderer.invoke('settings:claude-code:use'),
     },
   },
   sessions: {
@@ -71,8 +79,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('sessions:view-attach', id, bounds),
     viewDetach: (id: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-detach', id),
-    viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }): Promise<boolean> =>
-      ipcRenderer.invoke('sessions:view-resize', id, bounds),
+    // Fire-and-forget during rapid window resize: avoid the invoke round-trip
+    // (renderer → main → reply promise) that adds latency at 60+ events/sec.
+    viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }): void => {
+      ipcRenderer.send('sessions:view-resize', id, bounds);
+    },
     viewIsAttached: (id: string): Promise<boolean> =>
       ipcRenderer.invoke('sessions:view-is-attached', id),
     viewsSetVisible: (visible: boolean): Promise<void> =>

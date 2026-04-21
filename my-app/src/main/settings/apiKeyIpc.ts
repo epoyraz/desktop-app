@@ -1,38 +1,40 @@
 /**
- * apiKeyIpc.ts — Lightweight IPC handlers for editing the Anthropic API key
- * from the hub Settings pane (separate from the full SettingsWindow flow).
+ * apiKeyIpc.ts — IPC handlers for managing Anthropic auth from the hub
+ * Settings pane. Supports both API keys and Claude Code OAuth credentials.
  *
- * Security invariant: raw key values are NEVER logged. Only keyLength + mask.
+ * Security invariant: raw key/token values are NEVER logged.
  */
 
 import { ipcMain } from 'electron';
 import { mainLogger } from '../logger';
 import { assertString } from '../ipc-validators';
+import { saveApiKey, saveOAuth, clearAuth, API_KEY_SERVICE, OAUTH_SERVICE } from '../identity/authStore';
+import { readClaudeCodeCredentials } from '../identity/claudeCodeAuth';
 
-const ANTHROPIC_SERVICE = 'com.agenticbrowser.anthropic';
-const ANTHROPIC_ACCOUNT = 'default';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const TEST_MODEL = 'claude-haiku-4-5-20251001';
 const TEST_TIMEOUT_MS = 8000;
 
+const CH_GET_STATUS = 'settings:api-key:get-status';
 const CH_GET_MASKED = 'settings:api-key:get-masked';
 const CH_SAVE = 'settings:api-key:save';
 const CH_TEST = 'settings:api-key:test';
 const CH_DELETE = 'settings:api-key:delete';
+const CH_CC_AVAILABLE = 'settings:claude-code:available';
+const CH_CC_USE = 'settings:claude-code:use';
+
+const ACCOUNT = 'default';
 
 interface KeytarLike {
   getPassword(service: string, account: string): Promise<string | null>;
-  setPassword(service: string, account: string, password: string): Promise<void>;
-  deletePassword(service: string, account: string): Promise<boolean>;
 }
 
 function loadKeytar(): KeytarLike | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('keytar') as KeytarLike;
-  } catch (err) {
-    mainLogger.warn('apiKeyIpc.keytarUnavailable', { error: (err as Error).message });
+  } catch {
     return null;
   }
 }
@@ -42,30 +44,53 @@ function maskKey(key: string): string {
   return `${key.slice(0, 7)}...${key.slice(-4)}`;
 }
 
-async function handleGetMasked(): Promise<{ present: boolean; masked: string | null }> {
+export interface AuthStatus {
+  type: 'oauth' | 'apiKey' | 'none';
+  masked?: string;
+  subscriptionType?: string | null;
+  expiresAt?: number;
+}
+
+async function handleGetStatus(): Promise<AuthStatus> {
   const keytar = loadKeytar();
-  if (!keytar) return { present: false, masked: null };
+  if (!keytar) return { type: 'none' };
+
   try {
-    const raw = await keytar.getPassword(ANTHROPIC_SERVICE, ANTHROPIC_ACCOUNT);
-    if (!raw) {
-      mainLogger.info('apiKeyIpc.getMasked.absent');
-      return { present: false, masked: null };
+    const oauthRaw = await keytar.getPassword(OAUTH_SERVICE, ACCOUNT);
+    if (oauthRaw) {
+      const parsed = JSON.parse(oauthRaw) as { subscriptionType?: string; expiresAt?: number; accessToken?: string };
+      return {
+        type: 'oauth',
+        subscriptionType: parsed.subscriptionType ?? null,
+        expiresAt: parsed.expiresAt,
+        masked: parsed.accessToken ? maskKey(parsed.accessToken) : undefined,
+      };
     }
-    const masked = maskKey(raw);
-    mainLogger.info('apiKeyIpc.getMasked.ok', { keyLength: raw.length, masked });
-    return { present: true, masked };
   } catch (err) {
-    mainLogger.warn('apiKeyIpc.getMasked.error', { error: (err as Error).message });
-    return { present: false, masked: null };
+    mainLogger.warn('apiKeyIpc.getStatus.oauthError', { error: (err as Error).message });
   }
+
+  try {
+    const raw = await keytar.getPassword(API_KEY_SERVICE, ACCOUNT);
+    if (raw) return { type: 'apiKey', masked: maskKey(raw) };
+  } catch (err) {
+    mainLogger.warn('apiKeyIpc.getStatus.apiKeyError', { error: (err as Error).message });
+  }
+
+  return { type: 'none' };
+}
+
+/** Legacy — kept for existing ConnectionsPane callers until they migrate. */
+async function handleGetMasked(): Promise<{ present: boolean; masked: string | null }> {
+  const status = await handleGetStatus();
+  if (status.type === 'none') return { present: false, masked: null };
+  return { present: true, masked: status.masked ?? null };
 }
 
 async function handleSave(_e: Electron.IpcMainInvokeEvent, key: string): Promise<void> {
   const validated = assertString(key, 'key', 500);
   mainLogger.info('apiKeyIpc.save', { keyLength: validated.length });
-  const keytar = loadKeytar();
-  if (!keytar) throw new Error('Keychain unavailable');
-  await keytar.setPassword(ANTHROPIC_SERVICE, ANTHROPIC_ACCOUNT, validated);
+  await saveApiKey(validated);
   mainLogger.info('apiKeyIpc.save.ok');
 }
 
@@ -94,17 +119,12 @@ async function handleTest(
       }),
     });
     clearTimeout(timeoutId);
-    if (response.ok) {
-      mainLogger.info('apiKeyIpc.test.ok');
-      return { success: true };
-    }
+    if (response.ok) return { success: true };
     let errorMsg = `HTTP ${response.status}`;
     try {
       const body = (await response.json()) as { error?: { message?: string } };
       if (body?.error?.message) errorMsg = body.error.message;
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     mainLogger.warn('apiKeyIpc.test.failed', { status: response.status, error: errorMsg });
     return { success: false, error: errorMsg };
   } catch (err) {
@@ -117,23 +137,43 @@ async function handleTest(
 
 async function handleDelete(): Promise<void> {
   mainLogger.info('apiKeyIpc.delete');
-  const keytar = loadKeytar();
-  if (!keytar) throw new Error('Keychain unavailable');
-  await keytar.deletePassword(ANTHROPIC_SERVICE, ANTHROPIC_ACCOUNT);
-  mainLogger.info('apiKeyIpc.delete.ok');
+  await clearAuth();
+}
+
+async function handleClaudeCodeAvailable(): Promise<{ available: boolean; subscriptionType?: string | null }> {
+  const creds = await readClaudeCodeCredentials();
+  if (!creds) return { available: false };
+  if (!creds.scopes.includes('user:inference')) return { available: false };
+  return { available: true, subscriptionType: creds.subscriptionType ?? null };
+}
+
+async function handleUseClaudeCode(): Promise<{ subscriptionType: string | null }> {
+  const creds = await readClaudeCodeCredentials();
+  if (!creds) throw new Error('Claude Code credentials not found');
+  if (!creds.scopes.includes('user:inference')) {
+    throw new Error('Claude Code token missing user:inference scope');
+  }
+  await saveOAuth(creds);
+  return { subscriptionType: creds.subscriptionType ?? null };
 }
 
 export function registerApiKeyHandlers(): void {
+  ipcMain.handle(CH_GET_STATUS, handleGetStatus);
   ipcMain.handle(CH_GET_MASKED, handleGetMasked);
   ipcMain.handle(CH_SAVE, handleSave);
   ipcMain.handle(CH_TEST, handleTest);
   ipcMain.handle(CH_DELETE, handleDelete);
+  ipcMain.handle(CH_CC_AVAILABLE, handleClaudeCodeAvailable);
+  ipcMain.handle(CH_CC_USE, handleUseClaudeCode);
   mainLogger.info('apiKeyIpc.register.ok');
 }
 
 export function unregisterApiKeyHandlers(): void {
+  ipcMain.removeHandler(CH_GET_STATUS);
   ipcMain.removeHandler(CH_GET_MASKED);
   ipcMain.removeHandler(CH_SAVE);
   ipcMain.removeHandler(CH_TEST);
   ipcMain.removeHandler(CH_DELETE);
+  ipcMain.removeHandler(CH_CC_AVAILABLE);
+  ipcMain.removeHandler(CH_CC_USE);
 }

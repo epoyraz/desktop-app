@@ -55,7 +55,7 @@ interface ElectronSessionAPI {
   get: (id: string) => Promise<import('./hub/types').AgentSession | null>;
   viewAttach: (id: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
   viewDetach: (id: string) => Promise<boolean>;
-  viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<boolean>;
+  viewResize: (id: string, bounds: { x: number; y: number; width: number; height: number }) => void;
   viewIsAttached: (id: string) => Promise<boolean>;
   viewsSetVisible: (visible: boolean) => Promise<void>;
   viewsDetachAll: () => Promise<void>;
@@ -100,12 +100,36 @@ interface ElectronPillAPI {
   openFollowUp: (sessionId: string, sessionPrompt: string) => void;
 }
 
+interface ElectronSettingsApiKeyAPI {
+  getMasked: () => Promise<{ present: boolean; masked: string | null }>;
+  getStatus: () => Promise<{
+    type: 'oauth' | 'apiKey' | 'none';
+    masked?: string;
+    subscriptionType?: string | null;
+    expiresAt?: number;
+  }>;
+  save: (key: string) => Promise<void>;
+  test: (key: string) => Promise<{ success: boolean; error?: string }>;
+  delete: () => Promise<void>;
+}
+
+interface ElectronSettingsClaudeCodeAPI {
+  available: () => Promise<{ available: boolean; subscriptionType?: string | null }>;
+  use: () => Promise<{ subscriptionType: string | null }>;
+}
+
+interface ElectronSettingsAPI {
+  apiKey: ElectronSettingsApiKeyAPI;
+  claudeCode?: ElectronSettingsClaudeCodeAPI;
+}
+
 interface ElectronAPI {
   pill: ElectronPillAPI;
   sessions: ElectronSessionAPI;
   channels: ElectronChannelsAPI;
   hotkeys?: ElectronHotkeysAPI;
   shell?: ElectronShellAPI;
+  settings?: ElectronSettingsAPI;
   on: ElectronOnAPI;
 }
 

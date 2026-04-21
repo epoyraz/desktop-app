@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import { useHydrateSession } from './useSessionsQuery';
 import { STATUS_LABEL } from './constants';
 import { ContentRenderer, getPreview } from './ContentRenderer';
+import { Markdown } from './Markdown';
 import { adaptSession } from './types';
 import type { AgentSession, OutputEntry } from './types';
 
@@ -184,7 +185,9 @@ function OutputRow({ entry }: { entry: OutputEntry }): React.ReactElement {
   if (entry.type === 'thinking') {
     return (
       <div className="step step--thinking">
-        <span className="step__text">{entry.content}</span>
+        <div className="step__text">
+          <Markdown source={entry.content} variant="compact" />
+        </div>
       </div>
     );
   }
@@ -292,7 +295,9 @@ function OutputRow({ entry }: { entry: OutputEntry }): React.ReactElement {
     return (
       <div className="step step--done">
         <div className="step__done-divider" />
-        <pre className="step__done-text">{entry.content}</pre>
+        <div className="step__done-text">
+          <Markdown source={entry.content} />
+        </div>
       </div>
     );
   }
@@ -307,7 +312,9 @@ function OutputRow({ entry }: { entry: OutputEntry }): React.ReactElement {
 
   return (
     <div className="step step--output">
-      <span className="step__text">{entry.content}</span>
+      <div className="step__text">
+        <Markdown source={entry.content} />
+      </div>
     </div>
   );
 }
