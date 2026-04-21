@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, globalShortcut } from 'electron';
 import { mainLogger } from '../logger';
 import { AccountStore } from './AccountStore';
 import { assertString } from '../ipc-validators';
-import { createPillWindow, togglePill } from '../pill';
+import { createPillWindow, togglePill, onPillVisibilityChange } from '../pill';
 
 const GLOBAL_SHORTCUT = 'CommandOrControl+Shift+Space';
 
@@ -104,16 +104,10 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
 
   const registerOnboardingShortcut = (accelerator: string): boolean => {
     if (!pillCreated) {
-      const pill = createPillWindow();
-      pill.on('show', () => {
-        if (!onboardingWindow.isDestroyed()) {
-          onboardingWindow.webContents.send('pill-shown');
-        }
-      });
-      pill.on('hide', () => {
-        if (!onboardingWindow.isDestroyed()) {
-          onboardingWindow.webContents.send('pill-hidden');
-        }
+      createPillWindow();
+      onPillVisibilityChange((visible) => {
+        if (onboardingWindow.isDestroyed()) return;
+        onboardingWindow.webContents.send(visible ? 'pill-shown' : 'pill-hidden');
       });
       pillCreated = true;
       mainLogger.info('onboardingHandlers.pillCreated');

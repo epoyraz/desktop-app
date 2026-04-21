@@ -175,6 +175,24 @@ export function createPillWindow(): BrowserWindow {
  * Show the pill window, repositioning it to center-top of the active display.
  * Measures show latency (§6 Acceptance #6 target: p95 ≤ 150ms).
  */
+const visibilityCallbacks: Array<(visible: boolean) => void> = [];
+
+export function onPillVisibilityChange(cb: (visible: boolean) => void): () => void {
+  visibilityCallbacks.push(cb);
+  return () => {
+    const i = visibilityCallbacks.indexOf(cb);
+    if (i >= 0) visibilityCallbacks.splice(i, 1);
+  };
+}
+
+function notifyVisibility(visible: boolean): void {
+  for (const cb of visibilityCallbacks) {
+    try { cb(visible); } catch (err) {
+      log.warn('pill.notifyVisibility.callbackError', { error: (err as Error).message });
+    }
+  }
+}
+
 export function showPill(): void {
   const t0 = performance.now();
 
@@ -192,6 +210,7 @@ export function showPill(): void {
   pillWindow.showInactive();
   pillWindow.setAlwaysOnTop(true, 'screen-saver');
   pillWindow.focus();
+  notifyVisibility(true);
 
   const latency_ms = performance.now() - t0;
   log.info('pill.show', {
@@ -223,6 +242,7 @@ export function hidePill(): void {
 
   log.info('pill.hidePill', { message: 'Hiding pill window' });
   pillWindow.hide();
+  notifyVisibility(false);
 }
 
 /**
