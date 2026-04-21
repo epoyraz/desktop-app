@@ -13,14 +13,18 @@ interface ParsedKey {
 }
 
 function parseKeyString(raw: string): ParsedKey {
-  const parts = raw.toLowerCase().split('+');
-  const key = parts[parts.length - 1];
+  const parts = raw.split('+');
+  const modLower = parts.map((p) => p.toLowerCase());
+  const lastRaw = parts[parts.length - 1];
+  const lastKey = lastRaw.toLowerCase();
+  // Shift is implicit for uppercase single-character keys: "G" => shift+g
+  const implicitShift = lastRaw.length === 1 && lastRaw !== lastRaw.toLowerCase();
   return {
-    key,
-    meta: parts.includes('meta'),
-    ctrl: parts.includes('ctrl'),
-    shift: parts.includes('shift'),
-    alt: parts.includes('alt'),
+    key: lastKey,
+    meta: modLower.includes('meta') || modLower.includes('cmd'),
+    ctrl: modLower.includes('ctrl'),
+    shift: modLower.includes('shift') || implicitShift,
+    alt: modLower.includes('alt'),
   };
 }
 
@@ -61,9 +65,12 @@ export class KeyManager {
   }
 
   setBindings(keybindings: KeyBinding[]): void {
-    this.bindings = keybindings.map((kb) => {
-      const parts = kb.keys.split(' ').map((p) => parseKeyString(p));
-      return { id: kb.id, sequence: parts };
+    this.bindings = keybindings.flatMap((kb) => {
+      const combos = Array.isArray(kb.keys) ? kb.keys : [kb.keys];
+      return combos.map((combo) => {
+        const parts = combo.split(' ').map((p) => parseKeyString(p));
+        return { id: kb.id, sequence: parts };
+      });
     });
   }
 
@@ -139,9 +146,13 @@ export class KeyManager {
     for (const binding of this.bindings) {
       if (binding.sequence.length !== 2) continue;
       if (!this.pendingChord) continue;
+      const first = binding.sequence[0];
       const firstMatch =
-        binding.sequence[0].key === this.pendingChord.key
-        && binding.sequence[0].shift === this.pendingChord.shift;
+        first.key === this.pendingChord.key
+        && first.shift === this.pendingChord.shift
+        && first.meta === this.pendingChord.meta
+        && first.ctrl === this.pendingChord.ctrl
+        && first.alt === this.pendingChord.alt;
       if (!firstMatch) continue;
       if (eventMatchesParsed(e, binding.sequence[1])) {
         return binding.id;
