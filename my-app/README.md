@@ -95,10 +95,8 @@ All commands run from the repo root via [Task](https://taskfile.dev).
 | Command | What |
 |---|---|
 | `task up` | Install deps and start the app |
-| `task test` | Vitest unit + integration |
 | `task lint` | ESLint |
 | `task typecheck` | tsc --noEmit |
-| `task visual` | Screenshot capture + diff |
 | `task make` | Build platform installers |
 
 ## Tech stack

@@ -88,10 +88,16 @@ export function Pill(): React.ReactElement {
   const hasResults = results.length > 0;
 
   useEffect(() => {
-    const baseHeight = 110;
+    const ta = ref.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
+    }
+    const textareaHeight = ta ? Math.min(ta.scrollHeight, 240) : 28;
+    const baseHeight = 82 + textareaHeight;
     const resultHeight = hasResults ? Math.min(results.length + 1, 9) * 36 + 2 : 0;
     window.pillAPI.setExpanded(baseHeight + resultHeight);
-  }, [hasResults, results.length]);
+  }, [hasResults, results.length, value]);
 
   const submit = useCallback(() => {
     const trimmed = value.trim();
@@ -121,12 +127,9 @@ export function Pill(): React.ReactElement {
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (followUp) {
-          setFollowUp(null);
-          setValue('');
-        } else {
-          window.pillAPI.hide();
-        }
+        setFollowUp(null);
+        setValue('');
+        window.pillAPI.hide();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIdx((i) => Math.min(i + 1, results.length));

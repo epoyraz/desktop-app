@@ -35,18 +35,6 @@ tasks:
     cmds:
       - npm run typecheck
 
-  test:
-    desc: Vitest unit/integration suite
-    dir: "{{.APP_DIR}}"
-    cmds:
-      - npm test
-
-  visual:
-    desc: Visual QA — capture screenshots + diff against references
-    dir: "{{.APP_DIR}}"
-    cmds:
-      - npm run visual:qa
-
   package:
     desc: Build an unpackaged app (electron-forge package)
     dir: "{{.APP_DIR}}"
