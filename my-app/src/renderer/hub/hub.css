@@ -142,6 +142,7 @@
   height: 24px;
   border-radius: var(--radius-sm);
   color: var(--color-fg-disabled);
+  outline: none;
   transition:
     color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out);
@@ -174,6 +175,7 @@
   border-radius: var(--radius-sm);
   color: var(--color-fg-disabled);
   position: relative;
+  outline: none;
   transition:
     color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out);
@@ -870,6 +872,11 @@
   position: absolute;
   margin: 0;
   z-index: 3;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }
 
 .pane__followup-hint--top {

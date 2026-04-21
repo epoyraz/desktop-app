@@ -472,7 +472,7 @@ export function HubApp(): React.ReactElement {
           <div className="hub-layout-bar__group">
             <button
               className={`hub-layout-bar__btn${gridColumns === 1 ? ' hub-layout-bar__btn--active' : ''}`}
-              onClick={() => { setGridColumns(1); setGridPage(0); }}
+              onClick={(e) => { setGridColumns(1); setGridPage(0); e.currentTarget.blur(); }}
               aria-label="1x1 layout"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">

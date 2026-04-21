@@ -482,21 +482,30 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
   }, [session.id, browserDead, computeBounds, browserNotReady, updateFrameRect]);
 
   const handleSetMode = useCallback((mode: PaneViewMode) => {
-    if (browserDead && mode !== 'output') {
-      setBrowserDead(false);
+    if (browserDead) {
+      setViewMode('output');
+      return;
     }
     setViewMode(mode);
+  }, [browserDead]);
+
+  useEffect(() => {
+    if (browserDead) setViewMode('output');
   }, [browserDead]);
 
   useEffect(() => {
     const onCycle = (e: Event) => {
       const detail = (e as CustomEvent<{ sessionId: string }>).detail;
       if (!detail || detail.sessionId !== session.id) return;
+      if (browserDead) {
+        console.log('[AgentPane] cycle view ignored — browser dead', { id: session.id });
+        setViewMode('output');
+        return;
+      }
       const order: PaneViewMode[] = ['output', 'split', 'browser'];
       setViewMode((curr) => {
         const next = order[(order.indexOf(curr) + 1) % order.length];
         console.log('[AgentPane] cycle view', { id: session.id, from: curr, to: next });
-        if (browserDead && next !== 'output') setBrowserDead(false);
         return next;
       });
     };
