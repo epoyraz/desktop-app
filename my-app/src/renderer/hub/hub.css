@@ -117,16 +117,14 @@
   font-size: var(--font-size-xs);
 }
 
-.hub-layout-bar {
+.hub-toolbar__center {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
-  padding: 0 var(--space-10) var(--space-2);
-  flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
-.hub-layout-bar__pager {
+.hub-toolbar__density {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -135,7 +133,16 @@
   padding: var(--space-1);
 }
 
-.hub-layout-bar__pager-btn {
+.hub-toolbar__pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background-color: var(--color-bg-elevated);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+
+.hub-toolbar__pager-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,55 +156,23 @@
     background-color var(--duration-fast) var(--ease-out);
 }
 
-.hub-layout-bar__pager-btn:hover:not(:disabled) {
+.hub-toolbar__pager-btn:hover:not(:disabled) {
   color: var(--color-fg-primary);
   background-color: var(--color-surface-interactive-hover);
 }
 
-.hub-layout-bar__pager-btn:disabled {
+.hub-toolbar__pager-btn:disabled {
   color: var(--color-fg-disabled);
   cursor: default;
 }
 
-.hub-layout-bar__pager-label {
+.hub-toolbar__pager-label {
   font-size: var(--font-size-xs);
   color: var(--color-fg-secondary);
   font-variant-numeric: tabular-nums;
   padding: 0 var(--space-1);
   min-width: 32px;
   text-align: center;
-}
-
-.hub-layout-bar__group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  background-color: var(--color-bg-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--space-1);
-}
-
-.hub-layout-bar__btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  color: var(--color-fg-disabled);
-  outline: none;
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    background-color var(--duration-fast) var(--ease-out);
-}
-
-.hub-layout-bar__btn:hover {
-  color: var(--color-fg-tertiary);
-}
-
-.hub-layout-bar__btn--active {
-  background-color: var(--color-surface-interactive-active);
-  color: var(--color-fg-primary);
 }
 
 .hub-toolbar__view-toggle {

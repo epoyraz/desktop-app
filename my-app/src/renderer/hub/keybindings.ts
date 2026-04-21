@@ -26,7 +26,7 @@ export const DEFAULT_KEYBINDINGS: KeyBinding[] = [
   { id: 'goto.list', label: 'List view', keys: ['g l'], category: 'Views' },
   { id: 'goto.settings', label: 'Settings', keys: ['Cmd+,'], category: 'Views' },
   { id: 'search.open', label: 'Search', keys: ['/'], category: 'Actions' },
-  { id: 'action.create', label: 'New agent', keys: ['c'], category: 'Actions' },
+  { id: 'action.create', label: 'New agent', keys: [], category: 'Actions' },
   { id: 'action.createPane', label: 'New pane', keys: [], category: 'Actions' },
   { id: 'action.dismiss', label: 'Dismiss session', keys: ['x'], category: 'Actions' },
   { id: 'action.cancel', label: 'Cancel session', keys: ['Ctrl+c'], category: 'Actions' },
