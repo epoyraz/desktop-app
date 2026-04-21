@@ -38,6 +38,80 @@ html, body {
   padding: 0 32px;
 }
 
+.onboarding-content-wide {
+  max-width: 900px;
+  padding: 0 40px;
+}
+
+.intro-panel {
+  width: 100%;
+  max-width: none;
+}
+
+.intro-content {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+
+.intro-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.intro-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.intro-subtitle {
+  font-size: 15px;
+  color: var(--color-fg-secondary);
+  margin: 0;
+  line-height: 1.6;
+  max-width: 340px;
+}
+
+.intro-cta {
+  margin-top: 10px;
+  padding: 12px 24px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.intro-image-wrap {
+  flex: 0 0 380px;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6),
+              0 0 80px -10px rgba(109, 129, 150, 0.15);
+}
+
+.intro-image-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-2xl);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+.intro-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .step-indicator {
   display: flex;
   align-items: center;
@@ -484,6 +558,27 @@ html, body {
   color: var(--color-fg-primary);
   font-size: 14px;
   font-weight: 500;
+}
+
+.shortcut-clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  color: inherit;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.shortcut-clickable:hover {
+  opacity: 0.85;
+}
+
+.shortcut-keys.shortcut-clickable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .shortcut-recording-dot {

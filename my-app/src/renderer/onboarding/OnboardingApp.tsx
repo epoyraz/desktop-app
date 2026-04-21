@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DomainList } from './DomainList';
+import introImage from './intro.png';
 
 interface ChromeProfile {
   directory: string;
@@ -43,7 +44,7 @@ declare global {
   }
 }
 
-type Step = 'profile' | 'apikey' | 'whatsapp' | 'shortcut';
+type Step = 'intro' | 'profile' | 'apikey' | 'whatsapp' | 'shortcut';
 
 const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+Space';
 
@@ -127,7 +128,7 @@ function ErrorReasonsDetails({ reasons }: { reasons: Record<string, number> }) {
 }
 
 export function OnboardingApp() {
-  const [step, setStep] = useState<Step>('profile');
+  const [step, setStep] = useState<Step>('intro');
   const [profiles, setProfiles] = useState<ChromeProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [importing, setImporting] = useState<string | null>(null);
@@ -280,16 +281,39 @@ export function OnboardingApp() {
     <div className="onboarding-container">
       <div className="onboarding-drag-region" />
 
-      <div className="onboarding-content">
+      <div className={`onboarding-content ${step === 'intro' ? 'onboarding-content-wide' : ''}`}>
         <div className="step-indicator">
-          <div className={`step-dot ${step === 'profile' ? 'active' : 'done'}`} />
-          <div className="step-line" />
-          <div className={`step-dot ${step === 'apikey' ? 'active' : step === 'profile' ? '' : 'done'}`} />
-          <div className="step-line" />
-          <div className={`step-dot ${step === 'whatsapp' ? 'active' : (step === 'shortcut' ? 'done' : '')}`} />
-          <div className="step-line" />
-          <div className={`step-dot ${step === 'shortcut' ? 'active' : ''}`} />
+          {(['intro', 'profile', 'apikey', 'whatsapp', 'shortcut'] as Step[]).map((s, i, all) => {
+            const currentIdx = all.indexOf(step);
+            const thisIdx = i;
+            const cls = thisIdx < currentIdx ? 'done' : thisIdx === currentIdx ? 'active' : '';
+            return (
+              <React.Fragment key={s}>
+                <div className={`step-dot ${cls}`} />
+                {i < all.length - 1 && <div className="step-line" />}
+              </React.Fragment>
+            );
+          })}
         </div>
+
+        {step === 'intro' && (
+          <div className="step-panel intro-panel">
+            <div className="intro-content">
+              <div className="intro-text">
+                <h1 className="intro-title">Browser Use Desktop</h1>
+                <p className="intro-subtitle">
+                  Run AI agents that browse the web, complete tasks, and report back — all from your desktop.
+                </p>
+                <button className="btn btn-primary intro-cta" onClick={() => setStep('profile')}>
+                  Get started
+                </button>
+              </div>
+              <div className="intro-image-wrap">
+                <img className="intro-image" src={introImage} alt="Browser Use Desktop" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {step === 'profile' && (
           <div className="step-panel">
@@ -534,26 +558,34 @@ export function OnboardingApp() {
 
             <div className="shortcut-demo">
               {recording ? (
-                <div className="shortcut-recording">
+                <button
+                  type="button"
+                  className="shortcut-recording shortcut-clickable"
+                  onClick={() => setRecording(false)}
+                  title="Click to cancel"
+                >
                   <div className="shortcut-recording-dot" />
                   <span>Press keys...</span>
-                </div>
+                </button>
               ) : (
-                <div className="shortcut-keys">
+                <button
+                  type="button"
+                  className="shortcut-keys shortcut-clickable"
+                  onClick={() => setRecording(true)}
+                  title="Click to change shortcut"
+                >
                   {formatAccelerator(accelerator).split(' ').map((key, i, arr) => (
                     <React.Fragment key={i}>
                       <kbd className="kbd">{key}</kbd>
                       {i < arr.length - 1 && <span className="kbd-plus">+</span>}
                     </React.Fragment>
                   ))}
-                </div>
+                </button>
               )}
             </div>
 
             <p className="shortcut-hint">
-              {shortcutActivated
-                ? 'Press your shortcut again to open the pill.'
-                : 'Press the shortcut to try it out.'}
+              Press the shortcut to try it.
             </p>
 
             <div className="apikey-actions">
