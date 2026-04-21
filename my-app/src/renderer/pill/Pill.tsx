@@ -319,10 +319,10 @@ export function Pill(): React.ReactElement {
           />
           <button
             type="button"
-            className="cmdbar__attach"
+            className="cmdbar__attach has-tooltip"
             onClick={() => fileInputRef.current?.click()}
             aria-label="Attach files"
-            title="Attach files"
+            data-tooltip="Attach files"
           >
             <PaperclipIcon />
           </button>

@@ -4,8 +4,7 @@
 #
 # macOS derives the Dock label from the .app folder name, so we rename
 # Electron.app -> "Browser Use.app" and update path.txt so electron-forge
-# can still find the binary. The plist CFBundleName must match the folder
-# name or macOS hides the dock icon.
+# can still find the binary.
 
 ELECTRON_DIR="node_modules/electron/dist"
 OLD_APP="$ELECTRON_DIR/Electron.app"

@@ -98,6 +98,9 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "uuid": "^13.0.0",
     "ws": "^8.20.0"
   }

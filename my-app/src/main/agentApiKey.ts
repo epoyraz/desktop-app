@@ -1,28 +1,17 @@
 /**
- * API key sourcing for the agent daemon.
+ * Returns the credential to use when calling the Anthropic Messages API.
+ * Delegates to authStore which handles both API keys and Claude Code OAuth
+ * bearer tokens (with auto-refresh).
  *
- * Priority:
- *   1. Keychain: service=com.agenticbrowser.anthropic, account=<email>
- *   2. Environment: ANTHROPIC_API_KEY
- *   3. null (caller handles missing key)
- *
- * Security invariant: the API key value is NEVER logged (D2 scrub rule).
- * Only metadata is logged: source ('keytar' | 'env' | 'none'), key length.
- *
- * Track 1 owns this file.
+ * Callers get back just a string — API key (sk-ant-api03-...) or OAuth
+ * access token (sk-ant-oat01-...). Downstream code branches on the
+ * prefix to choose between x-api-key and Bearer.
  */
 
 import { mainLogger } from './logger';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+import { resolveAuth, type ResolvedAuth } from './identity/authStore';
 
 export const API_KEY_KEYCHAIN_SERVICE = 'com.agenticbrowser.anthropic';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export interface KeytarLike {
   getPassword(service: string, account: string): Promise<string | null>;
@@ -31,79 +20,27 @@ export interface KeytarLike {
 }
 
 export interface GetApiKeyOptions {
-  /** Injected keytar module (for tests or when keytar is available) */
   keytarModule?: KeytarLike;
-  /** Account email to look up in Keychain */
   accountEmail?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+export async function resolveAgentAuth(): Promise<ResolvedAuth> {
+  return resolveAuth();
+}
 
 /**
- * Retrieve the Anthropic API key.
- *
- * 1. Try Keychain (keytar) with service=com.agenticbrowser.anthropic
- * 2. Fall back to process.env.ANTHROPIC_API_KEY
- * 3. Return null if neither source has a key
- *
- * The key value is NEVER logged. Only metadata (source, length) is logged.
+ * Legacy getter: returns the raw token string. Kept for existing callers that
+ * pass it to runAgent({ apiKey }); agent detects OAuth by the sk-ant-oat prefix.
  */
-export async function getApiKey(opts: GetApiKeyOptions = {}): Promise<string | null> {
-  const { accountEmail } = opts;
-  let keytarMod = opts.keytarModule;
-
-  if (!keytarMod) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      keytarMod = require('keytar') as KeytarLike;
-    } catch {
-      mainLogger.debug('agentApiKey.getApiKey.keytarUnavailable');
-    }
+export async function getApiKey(_opts: GetApiKeyOptions = {}): Promise<string | null> {
+  const auth = await resolveAuth();
+  if (!auth) {
+    mainLogger.warn('agentApiKey.getApiKey.none');
+    return null;
   }
-
-  // Source 1: Keychain via keytar (try account email, then 'default')
-  if (keytarMod) {
-    const accounts = accountEmail ? [accountEmail, 'default'] : ['default'];
-    for (const account of accounts) {
-      try {
-        const key = await keytarMod.getPassword(API_KEY_KEYCHAIN_SERVICE, account);
-        if (key) {
-          mainLogger.info('agentApiKey.getApiKey', {
-            source: 'keytar',
-            keyLength: key.length,
-            account,
-          });
-          return key;
-        }
-      } catch (err) {
-        mainLogger.warn('agentApiKey.getApiKey.keytarError', {
-          error: (err as Error).message,
-          account,
-        });
-      }
-    }
-    mainLogger.debug('agentApiKey.getApiKey', {
-      source: 'keytar',
-      result: 'not_found',
-    });
-  }
-
-  // Source 2: Environment variable
-  const envKey = process.env.ANTHROPIC_API_KEY;
-  if (envKey) {
-    mainLogger.info('agentApiKey.getApiKey', {
-      source: 'env',
-      keyLength: envKey.length,
-    });
-    return envKey;
-  }
-
-  // Source 3: No key available
-  mainLogger.warn('agentApiKey.getApiKey', {
-    source: 'none',
-    msg: 'No API key found in Keychain or environment',
+  mainLogger.info('agentApiKey.getApiKey.ok', {
+    authType: auth.type,
+    length: auth.value.length,
   });
-  return null;
+  return auth.value;
 }

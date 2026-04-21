@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DomainList } from './DomainList';
 import introImage from './intro.png';
 import chromeLogo from './chrome-logo.svg';
+import claudeCodeLogo from './claude-code-logo.svg';
 
 interface ChromeProfile {
   directory: string;
@@ -27,6 +28,8 @@ declare global {
       importChromeProfileCookies: (profileDir: string) => Promise<CookieImportResult>;
       saveApiKey: (key: string) => Promise<void>;
       testApiKey: (key: string) => Promise<{ success: boolean; error?: string }>;
+      detectClaudeCode: () => Promise<{ available: boolean; subscriptionType?: string | null; hasInference?: boolean }>;
+      useClaudeCode: () => Promise<{ subscriptionType: string | null }>;
       requestNotifications: () => Promise<{ supported: boolean }>;
       listenShortcut: () => Promise<{ ok: boolean; accelerator: string }>;
       setShortcut: (accelerator: string) => Promise<{ ok: boolean; accelerator: string }>;
@@ -207,6 +210,25 @@ export function OnboardingApp() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [claudeCode, setClaudeCode] = useState<{ available: boolean; subscriptionType?: string | null } | null>(null);
+  const [usingClaudeCode, setUsingClaudeCode] = useState(false);
+
+  useEffect(() => {
+    window.onboardingAPI.detectClaudeCode().then((res) => {
+      setClaudeCode({ available: res.available, subscriptionType: res.subscriptionType });
+    }).catch(() => setClaudeCode({ available: false }));
+  }, []);
+
+  const handleUseClaudeCode = useCallback(async () => {
+    try {
+      await window.onboardingAPI.useClaudeCode();
+      setUsingClaudeCode(true);
+      setStep('whatsapp');
+    } catch (err) {
+      console.error('[onboarding] useClaudeCode failed', err);
+    }
+  }, []);
 
   const [accelerator, setAccelerator] = useState<string>(DEFAULT_ACCELERATOR);
   const [recording, setRecording] = useState(false);
@@ -505,6 +527,29 @@ export function OnboardingApp() {
             <p className="step-subtitle">
               Your key is stored locally in the system keychain.
             </p>
+
+            {claudeCode?.available && !usingClaudeCode && (
+              <button
+                type="button"
+                className="claude-code-card"
+                onClick={handleUseClaudeCode}
+              >
+                <div className="claude-code-card__icon">
+                  <img src={claudeCodeLogo} alt="" />
+                </div>
+                <div className="claude-code-card__text">
+                  <div className="claude-code-card__title">Sign in with Claude</div>
+                  <div className="claude-code-card__sub">
+                    Use your Claude {claudeCode.subscriptionType === 'max' ? 'Max' : claudeCode.subscriptionType === 'pro' ? 'Pro' : 'subscription'} — no API key needed
+                  </div>
+                </div>
+                <div className="claude-code-card__chevron">&rsaquo;</div>
+              </button>
+            )}
+
+            {claudeCode?.available && !usingClaudeCode && (
+              <div className="apikey-or-divider"><span>or paste an API key</span></div>
+            )}
 
             <div className="apikey-input-wrap">
               <input

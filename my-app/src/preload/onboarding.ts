@@ -27,6 +27,12 @@ const onboardingAPI = {
   saveApiKey: (key: string): Promise<void> =>
     ipcRenderer.invoke('onboarding:save-api-key', key),
 
+  detectClaudeCode: (): Promise<{ available: boolean; subscriptionType?: string | null; hasInference?: boolean }> =>
+    ipcRenderer.invoke('onboarding:detect-claude-code'),
+
+  useClaudeCode: (): Promise<{ subscriptionType: string | null }> =>
+    ipcRenderer.invoke('onboarding:use-claude-code'),
+
   testApiKey: (key: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('onboarding:test-api-key', key),
 

@@ -336,6 +336,87 @@ html, body {
   color: var(--color-status-error);
 }
 
+/* Claude Code sign-in shortcut */
+
+.claude-code-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+}
+
+.claude-code-card:hover {
+  border-color: var(--palette-500);
+  background: var(--color-bg-overlay);
+}
+
+.claude-code-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.claude-code-card__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.claude-code-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.claude-code-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-fg-primary);
+}
+
+.claude-code-card__sub {
+  font-size: 12px;
+  color: var(--color-fg-secondary);
+}
+
+.claude-code-card__chevron {
+  font-size: 18px;
+  color: var(--color-fg-tertiary);
+  flex-shrink: 0;
+}
+
+.apikey-or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--color-fg-tertiary);
+  font-size: 12px;
+}
+
+.apikey-or-divider::before,
+.apikey-or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+
 /* API key */
 
 .apikey-input-wrap {

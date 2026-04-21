@@ -265,17 +265,60 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 0;
   color: var(--color-fg-secondary, #c8c8c8);
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.cmdbar__attach > svg {
+  display: block;
 }
 
 .cmdbar__attach:hover {
   color: var(--color-fg-primary, #fff);
   background-color: var(--color-bg-elevated, #222);
+}
+
+/* ---------------------------------------------------------------------------
+   TOOLTIP — shared, CSS-only
+--------------------------------------------------------------------------- */
+
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-fg-primary, #fff);
+  background: var(--color-bg-elevated, #2a2a2a);
+  border: 1px solid var(--color-border-subtle, #333);
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
+  z-index: var(--z-tooltip, 9999);
+}
+
+.has-tooltip:hover::after,
+.has-tooltip:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

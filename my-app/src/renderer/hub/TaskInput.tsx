@@ -193,10 +193,10 @@ export const TaskInput = forwardRef<TaskInputHandle, TaskInputProps>(function Ta
         <div className="task-input__actions">
           <button
             type="button"
-            className="task-input__attach"
+            className="task-input__attach has-tooltip"
             onClick={() => fileInputRef.current?.click()}
             aria-label="Attach files"
-            title="Attach files"
+            data-tooltip="Attach files"
           >
             <PaperclipIcon />
           </button>

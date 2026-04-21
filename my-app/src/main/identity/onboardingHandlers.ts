@@ -3,6 +3,8 @@ import { mainLogger } from '../logger';
 import { AccountStore } from './AccountStore';
 import { assertString } from '../ipc-validators';
 import { createPillWindow, togglePill, onPillVisibilityChange } from '../pill';
+import { readClaudeCodeCredentials } from './claudeCodeAuth';
+import { saveApiKey as authSaveApiKey, saveOAuth } from './authStore';
 
 const GLOBAL_SHORTCUT = 'CommandOrControl+Shift+Space';
 
@@ -30,20 +32,37 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
     mainLogger.info('onboardingHandlers.saveApiKey', {
       keyLength: validatedKey.length,
     });
-
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const keytar = require('keytar') as {
-        setPassword(s: string, a: string, p: string): Promise<void>;
-      };
-      await keytar.setPassword(ANTHROPIC_SERVICE, 'default', validatedKey);
-      mainLogger.info('onboardingHandlers.saveApiKey.ok');
+      await authSaveApiKey(validatedKey);
     } catch (err) {
       mainLogger.error('onboardingHandlers.saveApiKey.failed', {
         error: (err as Error).message,
       });
       throw new Error('Failed to save API key to keychain');
     }
+  });
+
+  ipcMain.handle('onboarding:detect-claude-code', async () => {
+    const creds = await readClaudeCodeCredentials();
+    if (!creds) return { available: false };
+    return {
+      available: true,
+      subscriptionType: creds.subscriptionType ?? null,
+      hasInference: creds.scopes.includes('user:inference'),
+    };
+  });
+
+  ipcMain.handle('onboarding:use-claude-code', async () => {
+    const creds = await readClaudeCodeCredentials();
+    if (!creds) throw new Error('Claude Code credentials not found');
+    if (!creds.scopes.includes('user:inference')) {
+      throw new Error('Claude Code token missing user:inference scope');
+    }
+    await saveOAuth(creds);
+    mainLogger.info('onboardingHandlers.useClaudeCode.ok', {
+      subscriptionType: creds.subscriptionType,
+    });
+    return { subscriptionType: creds.subscriptionType ?? null };
   });
 
   ipcMain.handle('onboarding:test-api-key', async (_event, key: string) => {
@@ -186,6 +205,8 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
 export function unregisterOnboardingHandlers(): void {
   ipcMain.removeHandler('onboarding:save-api-key');
   ipcMain.removeHandler('onboarding:test-api-key');
+  ipcMain.removeHandler('onboarding:detect-claude-code');
+  ipcMain.removeHandler('onboarding:use-claude-code');
   ipcMain.removeHandler('onboarding:listen-shortcut');
   ipcMain.removeHandler('onboarding:set-shortcut');
   ipcMain.removeHandler('onboarding:request-notifications');

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Markdown } from './Markdown';
 
 function tryParseJSON(str: string): Record<string, unknown> | null {
   try {
@@ -86,7 +87,10 @@ interface ContentRendererProps {
 }
 
 export function ContentRenderer({ content, type }: ContentRendererProps): React.ReactElement {
-  if (type === 'thinking' || type === 'text' || type === 'error') {
+  if (type === 'text' || type === 'done' || type === 'user_input') {
+    return <Markdown source={content} />;
+  }
+  if (type === 'thinking' || type === 'error') {
     return <pre className="entry__pre">{content}</pre>;
   }
 

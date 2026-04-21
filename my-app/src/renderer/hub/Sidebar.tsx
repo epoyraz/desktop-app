@@ -1,160 +1,331 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { SessionCard } from './SessionCard';
-import { APP_TITLE, INPUT_PLACEHOLDER, EMPTY_SIDEBAR_TITLE, EMPTY_SIDEBAR_BODY } from './constants';
-import type { AgentSession } from './types';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { AgentSession, SessionStatus } from './types';
 
-interface SidebarProps {
-  sessions: AgentSession[];
-  selectedSessionId: string | null;
-  onSelectSession: (id: string) => void;
-  onCreateSession: (prompt: string) => void;
+const COLLAPSED_STORAGE_KEY = 'hub-sidebar-collapsed';
+
+interface SidebarSession extends AgentSession {
+  primarySite?: string | null;
+  lastActivityAt?: number;
 }
 
-function SettingsIcon(): React.ReactElement {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M6.5 1.5L6.8 3.1C6.3 3.3 5.8 3.6 5.4 4L3.8 3.4L2.3 5.9L3.6 7C3.5 7.3 3.5 7.7 3.5 8C3.5 8.3 3.5 8.7 3.6 9L2.3 10.1L3.8 12.6L5.4 12C5.8 12.4 6.3 12.7 6.8 12.9L7.1 14.5H9.5L9.8 12.9C10.3 12.7 10.8 12.4 11.2 12L12.8 12.6L14.3 10.1L13 9C13.1 8.7 13.1 8.3 13.1 8C13.1 7.7 13.1 7.3 13 7L14.3 5.9L12.8 3.4L11.2 4C10.8 3.6 10.3 3.3 9.8 3.1L9.5 1.5H6.5Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <circle cx="8.3" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" fill="none" />
-    </svg>
-  );
+interface SidebarProps {
+  sessions?: SidebarSession[];
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+  onNewAgent?: () => void;
+}
+
+const MOCK_SIDEBAR_SESSIONS: SidebarSession[] = [
+  {
+    id: 'mock-1',
+    prompt: 'Reply to unread DMs on LinkedIn',
+    status: 'running',
+    createdAt: Date.now() - 1000 * 60 * 4,
+    output: [],
+    primarySite: 'linkedin.com',
+    lastActivityAt: Date.now() - 1000 * 5,
+  },
+  {
+    id: 'mock-2',
+    prompt: 'Summarize latest X notifications',
+    status: 'idle',
+    createdAt: Date.now() - 1000 * 60 * 12,
+    output: [],
+    primarySite: 'x.com',
+    lastActivityAt: Date.now() - 1000 * 60 * 2,
+  },
+  {
+    id: 'mock-3',
+    prompt: 'Find 10 SaaS founders hiring eng managers',
+    status: 'stuck',
+    createdAt: Date.now() - 1000 * 60 * 30,
+    output: [],
+    primarySite: 'google.com',
+    lastActivityAt: Date.now() - 1000 * 60 * 8,
+  },
+  {
+    id: 'mock-4',
+    prompt: 'Draft a reply to Jessica from Tuesday',
+    status: 'stopped',
+    createdAt: Date.now() - 1000 * 60 * 60 * 2,
+    output: [],
+    primarySite: 'gmail.com',
+    lastActivityAt: Date.now() - 1000 * 60 * 55,
+  },
+  {
+    id: 'mock-5',
+    prompt: 'Check Reddit for competitor mentions',
+    status: 'stopped',
+    createdAt: Date.now() - 1000 * 60 * 60 * 5,
+    output: [],
+    primarySite: 'reddit.com',
+    lastActivityAt: Date.now() - 1000 * 60 * 60 * 4,
+  },
+  {
+    id: 'mock-6',
+    prompt: 'Old calendar cleanup run',
+    status: 'stopped',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24,
+    output: [],
+    primarySite: 'calendar.google.com',
+    lastActivityAt: Date.now() - 1000 * 60 * 60 * 23,
+    hidden: true,
+  },
+];
+
+const STATUS_DOT: Record<SessionStatus, { color: string; label: string }> = {
+  running: { color: '#3fb950', label: 'Running' },
+  idle:    { color: '#d29922', label: 'Waiting for input' },
+  stuck:   { color: '#f85149', label: 'Stuck' },
+  stopped: { color: '#6e7681', label: 'Stopped' },
+  draft:   { color: '#6e7681', label: 'Draft' },
+};
+
+function formatRelative(ts: number): string {
+  const delta = Date.now() - ts;
+  const m = Math.floor(delta / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
+function faviconUrl(site: string | null | undefined): string | null {
+  if (!site) return null;
+  const clean = site.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  return `https://www.google.com/s2/favicons?domain=${clean}&sz=64`;
 }
 
 function PlusIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
 
-function ArrowUpIcon(): React.ReactElement {
+function SidebarToggleIcon({ collapsed }: { collapsed: boolean }): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M7 12V3M3 6.5L7 2.5L11 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect x="1.5" y="2" width="11" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="5.5" y1="2.5" x2="5.5" y2="11.5" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d={collapsed ? 'M8.5 5L10 7L8.5 9' : 'M10 5L8.5 7L10 9'}
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-export function Sidebar({
-  sessions,
-  selectedSessionId,
-  onSelectSession,
-  onCreateSession,
-}: SidebarProps): React.ReactElement {
-  const [prompt, setPrompt] = useState('');
-  const [inputFocused, setInputFocused] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleSubmit = useCallback(() => {
-    const trimmed = prompt.trim();
-    if (!trimmed) return;
-    console.log('[Sidebar] handleSubmit', { prompt: trimmed });
-    onCreateSession(trimmed);
-    setPrompt('');
-    textareaRef.current?.focus();
-  }, [prompt, onCreateSession]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
-
-  const runningCount = sessions.filter((s) => s.status === 'running').length;
-
+function ActiveGroupIcon(): React.ReactElement {
   return (
-    <aside className="hub-sidebar" aria-label="Sessions sidebar">
-      <header className="hub-sidebar__header">
-        <div className="hub-sidebar__header-left">
-          <span className="hub-sidebar__title">{APP_TITLE}</span>
-          {runningCount > 0 && (
-            <span className="hub-sidebar__running-badge">{runningCount}</span>
-          )}
-        </div>
-        <button
-          className="hub-sidebar__new-btn"
-          onClick={() => textareaRef.current?.focus()}
-          title="New session"
-          aria-label="New session"
-        >
-          <PlusIcon />
-        </button>
-      </header>
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <circle cx="6" cy="6" r="3" fill="currentColor" />
+      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1" opacity="0.4" />
+    </svg>
+  );
+}
 
-      <div className="hub-sidebar__session-list" role="list" aria-label="Session list">
-        {sessions.length === 0 ? (
-          <div className="hub-sidebar__empty">
-            <div className="hub-sidebar__empty-icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </div>
-            <p className="hub-sidebar__empty-title">{EMPTY_SIDEBAR_TITLE}</p>
-            <p className="hub-sidebar__empty-text">{EMPTY_SIDEBAR_BODY}</p>
-          </div>
+function DoneGroupIcon(): React.ReactElement {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M3.8 6.2L5.3 7.7L8.2 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function HiddenGroupIcon(): React.ReactElement {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <circle cx="6" cy="6" r="1.3" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2 2l8 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }): React.ReactElement {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms' }}
+    >
+      <path d="M3.5 2.5 6.5 5l-3 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SessionRow({
+  s,
+  selected,
+  onSelect,
+  collapsed = false,
+}: {
+  s: SidebarSession;
+  selected: boolean;
+  onSelect?: (id: string) => void;
+  collapsed?: boolean;
+}): React.ReactElement {
+  const dot = STATUS_DOT[s.status];
+  const favicon = faviconUrl(s.primarySite);
+  const last = s.lastActivityAt ?? s.createdAt;
+  return (
+    <button
+      type="button"
+      className={`sidebar__row${selected ? ' sidebar__row--active' : ''}${collapsed ? ' sidebar__row--collapsed has-tooltip' : ''}`}
+      onClick={() => onSelect?.(s.id)}
+      title={collapsed ? undefined : s.prompt}
+      data-tooltip={collapsed ? s.prompt : undefined}
+    >
+      <span className="sidebar__row-icon">
+        {favicon ? (
+          <img src={favicon} alt="" width={18} height={18} />
         ) : (
-          sessions.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              isSelected={session.id === selectedSessionId}
-              onClick={() => onSelectSession(session.id)}
-            />
-          ))
+          <span className="sidebar__row-icon-fallback" />
         )}
-      </div>
+        <span className="sidebar__row-dot" style={{ background: dot.color }} aria-label={dot.label} />
+      </span>
+      {!collapsed && (
+        <>
+          <span className="sidebar__row-title">{s.prompt}</span>
+          <span className="sidebar__row-time">{formatRelative(last)}</span>
+        </>
+      )}
+    </button>
+  );
+}
 
-      <div className="hub-sidebar__footer">
-        <div className={`hub-sidebar__input-wrapper${inputFocused ? ' hub-sidebar__input-wrapper--focused' : ''}`}>
-          <textarea
-            ref={textareaRef}
-            className="hub-sidebar__input"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            placeholder={INPUT_PLACEHOLDER}
-            rows={2}
-            aria-label="New session prompt"
-          />
-          <div className="hub-sidebar__input-actions">
-            <span className="hub-sidebar__input-hint">
-              {prompt.trim() ? '↵ send' : '⇧↵ newline'}
-            </span>
-            <button
-              className="hub-sidebar__submit"
-              onClick={handleSubmit}
-              disabled={!prompt.trim()}
-              aria-label="Start session"
-              title="Start session (Enter)"
-            >
-              <ArrowUpIcon />
-            </button>
-          </div>
+interface GroupProps {
+  label: string;
+  icon: React.ReactElement;
+  tone: 'active' | 'done' | 'hidden';
+  sessions: SidebarSession[];
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+  defaultOpen?: boolean;
+  collapsed?: boolean;
+}
+
+function Group({ label, icon, tone, sessions, selectedId, onSelect, defaultOpen = true, collapsed = false }: GroupProps): React.ReactElement | null {
+  const [open, setOpen] = useState(defaultOpen);
+  if (sessions.length === 0) return null;
+
+  if (collapsed) {
+    return (
+      <div className={`sidebar__group sidebar__group--collapsed sidebar__group--${tone}`}>
+        <div className={`sidebar__group-rail-icon sidebar__group-icon--${tone} has-tooltip`} data-tooltip={`${label} (${sessions.length})`}>
+          {icon}
+          <span className="sidebar__group-rail-count">{sessions.length}</span>
         </div>
+        <div className="sidebar__group-body sidebar__group-body--collapsed">
+          {sessions.map((s) => (
+            <SessionRow key={s.id} s={s} selected={s.id === selectedId} onSelect={onSelect} collapsed />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-        <div className="hub-sidebar__footer-bar">
+  return (
+    <div className="sidebar__group">
+      <button
+        type="button"
+        className="sidebar__group-header"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={`sidebar__group-icon sidebar__group-icon--${tone}`}>{icon}</span>
+        <span className="sidebar__group-label">{label}</span>
+        <span className="sidebar__group-count">{sessions.length}</span>
+        <span className="sidebar__group-chevron"><ChevronIcon open={open} /></span>
+      </button>
+      {open && (
+        <div className="sidebar__group-body">
+          {sessions.map((s) => (
+            <SessionRow key={s.id} s={s} selected={s.id === selectedId} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Sidebar({ sessions, selectedId, onSelect, onNewAgent }: SidebarProps): React.ReactElement {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [collapsed]);
+
+  const data = sessions && sessions.length > 0 ? sessions : MOCK_SIDEBAR_SESSIONS;
+
+  const { active, done, hidden } = useMemo(() => {
+    const sortByActivity = (a: SidebarSession, b: SidebarSession): number =>
+      (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt);
+    const act: SidebarSession[] = [];
+    const don: SidebarSession[] = [];
+    const hid: SidebarSession[] = [];
+    for (const s of data) {
+      if (s.hidden) hid.push(s);
+      else if (s.status === 'running' || s.status === 'idle' || s.status === 'stuck' || s.status === 'draft') act.push(s);
+      else don.push(s);
+    }
+    act.sort(sortByActivity);
+    don.sort(sortByActivity);
+    hid.sort(sortByActivity);
+    return { active: act, done: don, hidden: hid };
+  }, [data]);
+
+  return (
+    <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`} aria-label="Agent sessions">
+      <div className="sidebar__header">
+        {!collapsed && <span className="sidebar__header-title">Agents</span>}
+        <div className="sidebar__header-actions">
+          {!collapsed && (
+            <button
+              type="button"
+              className="sidebar__icon-btn has-tooltip"
+              onClick={onNewAgent}
+              aria-label="New agent"
+              data-tooltip="New agent"
+            >
+              <PlusIcon />
+            </button>
+          )}
           <button
-            className="hub-sidebar__settings-btn"
-            aria-label="Settings"
-            title="Settings"
+            type="button"
+            className="sidebar__icon-btn has-tooltip"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            <SettingsIcon />
+            <SidebarToggleIcon collapsed={collapsed} />
           </button>
         </div>
+      </div>
+
+      <div className="sidebar__groups">
+        <Group label="Active" tone="active" icon={<ActiveGroupIcon />} sessions={active} selectedId={selectedId} onSelect={onSelect} defaultOpen collapsed={collapsed} />
+        <Group label="Done" tone="done" icon={<DoneGroupIcon />} sessions={done} selectedId={selectedId} onSelect={onSelect} defaultOpen collapsed={collapsed} />
+        <Group label="Hidden" tone="hidden" icon={<HiddenGroupIcon />} sessions={hidden} selectedId={selectedId} onSelect={onSelect} defaultOpen={false} collapsed={collapsed} />
       </div>
     </aside>
   );
