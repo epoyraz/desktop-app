@@ -297,6 +297,23 @@ export function HubApp(): React.ReactElement {
     pendingFocusIdRef.current = null;
   }, [sessions]);
 
+  const knownIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (knownIdsRef.current === null) {
+      knownIdsRef.current = new Set(sessions.map((s) => s.id));
+      console.log('[HubApp] initialize knownIds', { count: knownIdsRef.current.size });
+      return;
+    }
+    const known = knownIdsRef.current;
+    const newSession = sessions.find((s) => !known.has(s.id));
+    knownIdsRef.current = new Set(sessions.map((s) => s.id));
+    if (!newSession) return;
+    const globalIdx = sessions.findIndex((s) => s.id === newSession.id);
+    console.log('[HubApp] new session detected -> focus', { id: newSession.id, globalIdx });
+    setViewMode('grid');
+    setFocusIndex(globalIdx);
+  }, [sessions, setViewMode]);
+
   useEffect(() => {
     const visible = sessions.filter((s) => !s.hidden);
     if (!visible.length) return;
