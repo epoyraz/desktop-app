@@ -1,0 +1,54 @@
+@import '../design/theme.global.css';
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--color-fg-primary, #d6d8dc);
+}
+
+#logs-root {
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-bg, #0b0d10);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.logs-root {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  background: var(--color-bg, #0b0d10);
+  border: 1px solid var(--color-border-subtle, #1f232a);
+  border-radius: 10px;
+}
+
+.logs-root .pane__terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.logs-root .xterm {
+  width: 100%;
+  height: 100%;
+}
+
+.logs-root .xterm-viewport {
+  background-color: transparent;
+}
+
+.logs-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-disabled, #5c6370);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}

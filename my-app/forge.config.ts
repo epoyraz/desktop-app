@@ -168,6 +168,12 @@ const config: ForgeConfig = {
           config: 'vite.preload.config.ts',
           target: 'preload',
         },
+        {
+          // Logs preload (small overlay window hosting xterm for focused session)
+          entry: 'src/preload/logs.ts',
+          config: 'vite.preload.config.ts',
+          target: 'preload',
+        },
       ],
       renderer: [
         {
@@ -184,6 +190,11 @@ const config: ForgeConfig = {
           // Onboarding renderer
           name: 'onboarding',
           config: 'vite.onboarding.config.mts',
+        },
+        {
+          // Logs renderer (src/renderer/logs/logs.html)
+          name: 'logs',
+          config: 'vite.logs.config.mts',
         },
       ],
     }),

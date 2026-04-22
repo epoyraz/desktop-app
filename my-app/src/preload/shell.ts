@@ -22,6 +22,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.send('pill:open-followup', sessionId, sessionPrompt);
     },
   },
+  logs: {
+    toggle: (
+      sessionId: string,
+      anchor?: { x: number; y: number; width: number; height: number },
+    ): Promise<boolean> => ipcRenderer.invoke('logs:toggle', sessionId, anchor),
+    close: (): Promise<void> => ipcRenderer.invoke('logs:close'),
+  },
   settings: {
     apiKey: {
       getMasked: (): Promise<{ present: boolean; masked: string | null }> =>
@@ -43,7 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   sessions: {
     create: (
-      promptOrPayload: string | { prompt: string; attachments?: Array<{ name: string; mime: string; bytes: Uint8Array }> },
+      promptOrPayload: string | { prompt: string; attachments?: Array<{ name: string; mime: string; bytes: Uint8Array }>; engine?: string },
     ): Promise<string> => ipcRenderer.invoke('sessions:create', promptOrPayload),
     start: (id: string): Promise<void> => ipcRenderer.invoke('sessions:start', id),
     cancel: (id: string): Promise<void> => ipcRenderer.invoke('sessions:cancel', id),
@@ -54,6 +61,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id: string): Promise<void> => ipcRenderer.invoke('sessions:delete', id),
     hide: (id: string): Promise<void> => ipcRenderer.invoke('sessions:hide', id),
     unhide: (id: string): Promise<void> => ipcRenderer.invoke('sessions:unhide', id),
+    downloadOutput: (filePath: string): Promise<{ opened: boolean }> =>
+      ipcRenderer.invoke('sessions:download-output', filePath),
+    revealOutput: (filePath: string): Promise<{ revealed: boolean }> =>
+      ipcRenderer.invoke('sessions:reveal-output', filePath),
+    listEditors: (): Promise<Array<{ id: string; name: string }>> =>
+      ipcRenderer.invoke('sessions:list-editors'),
+    openInEditor: (editorId: string, filePath: string): Promise<{ opened: boolean }> =>
+      ipcRenderer.invoke('sessions:open-in-editor', { editorId, filePath }),
+    listEngines: (): Promise<Array<{ id: string; displayName: string; binaryName: string }>> =>
+      ipcRenderer.invoke('sessions:list-engines'),
+    engineStatus: (engineId: string): Promise<{
+      id: string;
+      displayName: string;
+      installed: { installed: boolean; version?: string; error?: string };
+      authed: { authed: boolean; error?: string };
+    }> => ipcRenderer.invoke('sessions:engine-status', engineId),
+    engineLogin: (engineId: string): Promise<{ opened: boolean; error?: string }> =>
+      ipcRenderer.invoke('sessions:engine-login', engineId),
     resume: (
       id: string,
       prompt: string,
@@ -104,6 +129,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       processes: Array<{ label: string; type: string; mb: number; sessionId?: string }>;
       processCount: number;
     }> => ipcRenderer.invoke('sessions:memory'),
+    getTermReplay: (id: string): Promise<string> =>
+      ipcRenderer.invoke('sessions:get-term-replay', id),
   },
   hotkeys: {
     getGlobalCmdbar: (): Promise<string> => ipcRenderer.invoke('hotkeys:get-global'),
@@ -135,6 +162,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('session-updated', handler);
       return () => ipcRenderer.removeListener('session-updated', handler);
     },
+    sessionBrowserGone: (cb: (id: string) => void): (() => void) => {
+      const handler = (_event: unknown, id: string) => {
+        if (typeof id === 'string') cb(id);
+      };
+      ipcRenderer.on('sessions:browser-gone', handler);
+      return () => ipcRenderer.removeListener('sessions:browser-gone', handler);
+    },
     sessionOutput: (cb: (id: string, event: HlEvent) => void): (() => void) => {
       const handler = (_event: unknown, id: string, raw: unknown) => {
         try {
@@ -145,6 +179,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       };
       ipcRenderer.on('session-output', handler);
       return () => ipcRenderer.removeListener('session-output', handler);
+    },
+    sessionOutputTerm: (cb: (id: string, bytes: string) => void): (() => void) => {
+      const handler = (_event: unknown, id: string, bytes: string) => {
+        if (typeof id === 'string' && typeof bytes === 'string') cb(id, bytes);
+      };
+      ipcRenderer.on('session-output-term', handler);
+      return () => ipcRenderer.removeListener('session-output-term', handler);
     },
     openSettings: (cb: () => void): (() => void) => {
       const handler = () => cb();

@@ -34,7 +34,7 @@ declare module '*.webp' {
 
 interface ElectronSessionAPI {
   create: (
-    promptOrPayload: string | { prompt: string; attachments?: Array<{ name: string; mime: string; bytes: Uint8Array }> },
+    promptOrPayload: string | { prompt: string; attachments?: Array<{ name: string; mime: string; bytes: Uint8Array }>; engine?: string },
   ) => Promise<string>;
   start: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
@@ -44,6 +44,18 @@ interface ElectronSessionAPI {
   delete: (id: string) => Promise<void>;
   hide: (id: string) => Promise<void>;
   unhide: (id: string) => Promise<void>;
+  downloadOutput: (filePath: string) => Promise<{ opened: boolean }>;
+  revealOutput: (filePath: string) => Promise<{ revealed: boolean }>;
+  listEditors: () => Promise<Array<{ id: string; name: string }>>;
+  openInEditor: (editorId: string, filePath: string) => Promise<{ opened: boolean }>;
+  listEngines: () => Promise<Array<{ id: string; displayName: string; binaryName: string }>>;
+  engineStatus: (engineId: string) => Promise<{
+    id: string;
+    displayName: string;
+    installed: { installed: boolean; version?: string; error?: string };
+    authed: { authed: boolean; error?: string };
+  }>;
+  engineLogin: (engineId: string) => Promise<{ opened: boolean; error?: string }>;
   resume: (
     id: string,
     prompt: string,
@@ -62,6 +74,7 @@ interface ElectronSessionAPI {
   getTabs: (id: string) => Promise<unknown[]>;
   poolStats: () => Promise<unknown>;
   memory: () => Promise<{ totalMb: number; sessions: Array<{ id: string; mb: number; status: string }>; processes: Array<{ label: string; type: string; mb: number; sessionId?: string }>; processCount: number }>;
+  getTermReplay: (id: string) => Promise<string>;
 }
 
 interface ElectronChannelsAPI {
@@ -75,7 +88,9 @@ interface ElectronChannelsAPI {
 
 interface ElectronOnAPI {
   sessionUpdated: (cb: (session: import('./hub/types').AgentSession) => void) => () => void;
+  sessionBrowserGone: (cb: (id: string) => void) => () => void;
   sessionOutput: (cb: (id: string, event: import('./hub/types').HlEvent) => void) => () => void;
+  sessionOutputTerm: (cb: (id: string, bytes: string) => void) => () => void;
   openSettings?: (cb: () => void) => () => void;
   zoomChanged?: (cb: (factor: number) => void) => () => void;
   whatsappQr?: (cb: (dataUrl: string) => void) => () => void;
@@ -98,6 +113,14 @@ interface ElectronPillAPI {
   toggle: () => Promise<void>;
   hide: () => Promise<void>;
   openFollowUp: (sessionId: string, sessionPrompt: string) => void;
+}
+
+interface ElectronLogsAPI {
+  toggle: (
+    sessionId: string,
+    anchor?: { x: number; y: number; width: number; height: number },
+  ) => Promise<boolean>;
+  close: () => Promise<void>;
 }
 
 interface ElectronSettingsApiKeyAPI {
@@ -125,6 +148,7 @@ interface ElectronSettingsAPI {
 
 interface ElectronAPI {
   pill: ElectronPillAPI;
+  logs?: ElectronLogsAPI;
   sessions: ElectronSessionAPI;
   channels: ElectronChannelsAPI;
   hotkeys?: ElectronHotkeysAPI;

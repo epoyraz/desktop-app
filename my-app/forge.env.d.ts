@@ -11,3 +11,7 @@ declare const PILL_VITE_NAME: string;
 // Track C: onboarding renderer globals injected by Forge VitePlugin (renderer name = "onboarding")
 declare const ONBOARDING_VITE_DEV_SERVER_URL: string | undefined;
 declare const ONBOARDING_VITE_NAME: string | undefined;
+
+// Logs renderer globals injected by Forge VitePlugin (renderer name = "logs")
+declare const LOGS_VITE_DEV_SERVER_URL: string | undefined;
+declare const LOGS_VITE_NAME: string | undefined;
