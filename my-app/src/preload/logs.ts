@@ -53,6 +53,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('session-updated', handler);
       return () => ipcRenderer.removeListener('session-updated', handler);
     },
+    // Structured per-event stream (file_output, done, error, etc.). Needed
+    // for live file rows — session-updated snapshots lag since appendOutput
+    // only emits session-output, not session-updated.
+    sessionOutput: (cb: (id: string, event: unknown) => void): (() => void) => {
+      const handler = (_e: unknown, id: string, event: unknown) => {
+        console.log('[logs-preload] session-output received', {
+          id,
+          type: (event as { type?: string })?.type,
+        });
+        if (typeof id === 'string') cb(id, event);
+      };
+      ipcRenderer.on('session-output', handler);
+      return () => ipcRenderer.removeListener('session-output', handler);
+    },
   },
 });
 

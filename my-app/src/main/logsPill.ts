@@ -359,9 +359,19 @@ export function focusLogsFollowUp(sessionId: string, anchor: PaneAnchor | null =
     log.warn('logs.focusFollowUp.no-window', {});
     return;
   }
-  if (mode === 'dot') setLogsMode('normal');
+  const cameFromDot = mode === 'dot';
+  if (cameFromDot) setLogsMode('normal');
   showLogs(sessionId, anchor);
-  safeSend('logs:focus-followup');
+  // Take OS-level focus — showLogs() uses showInactive() so the hub keeps
+  // focus normally, but to type into the textarea the logs window needs to
+  // be the focused window. Without this macOS leaves the caret in the hub.
+  logsWindow.focus();
+  // When promoting from dot→normal the textarea isn't in the DOM yet;
+  // defer the focus-followup signal so the renderer has re-rendered by
+  // the time it arrives. Normal/full can focus synchronously.
+  const dispatch = (): void => safeSend('logs:focus-followup');
+  if (cameFromDot) setTimeout(dispatch, 80);
+  else dispatch();
 }
 
 export function hideLogs(): void {

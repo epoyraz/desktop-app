@@ -62,6 +62,7 @@ import { AccountStore } from './identity/AccountStore';
 import { createOnboardingWindow } from './identity/onboardingWindow';
 import { registerOnboardingHandlers, unregisterOnboardingHandlers } from './identity/onboardingHandlers';
 import { registerApiKeyHandlers } from './settings/apiKeyIpc';
+import { registerConsentHandlers } from './consentIpc';
 import { registerChromeImportHandlers, unregisterChromeImportHandlers } from './chrome-import/ipc';
 import { mainLogger } from './logger';
 import {
@@ -184,6 +185,7 @@ function openShellAndWire(): BrowserWindow {
   }
 
   registerApiKeyHandlers();
+  registerConsentHandlers();
 
   ipcMain.handle('hotkeys:get-global', () => getGlobalCmdbarAccelerator());
   ipcMain.handle('hotkeys:set-global', (_e, accel: string) => {
@@ -496,6 +498,12 @@ app.whenReady().then(async () => {
   sessionManager.onEvent('session-output', (id, line) => {
     shellWindow?.webContents.send('session-output', id, line);
     sendToPill('session-output', { id, line });
+    // Logs window needs structured events live (file_output, done, etc.) —
+    // not only at the next session-updated snapshot, which lags.
+    const logsWin = getLogsWindow();
+    if (logsWin && !logsWin.isDestroyed()) {
+      logsWin.webContents.send('session-output', id, line);
+    }
   });
   sessionManager.onEvent('session-output-term', (id, bytes) => {
     shellWindow?.webContents.send('session-output-term', id, bytes);

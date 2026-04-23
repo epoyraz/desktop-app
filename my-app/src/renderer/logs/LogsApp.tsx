@@ -272,6 +272,25 @@ export function LogsApp(): React.ReactElement {
     return unsub;
   }, [sessionId]);
 
+  // SessionManager.appendOutput emits `session-output` but NOT `session-updated`,
+  // so without this subscription file rows only appear after the next status
+  // transition (or a session switch). Listen to the per-event stream and
+  // append file_output events as they arrive; dedupe by path in case an event
+  // is delivered twice.
+  useEffect(() => {
+    if (!sessionId) return;
+    const unsub = window.electronAPI?.on.sessionOutput?.((id, event) => {
+      if (id !== sessionId) return;
+      if ((event as { type?: string }).type !== 'file_output') return;
+      const ev = event as unknown as FileOutputEntry;
+      setFiles((prev) => {
+        if (prev.some((f) => f.path === ev.path)) return prev;
+        return [...prev, { type: 'file_output', name: ev.name, path: ev.path, size: ev.size, mime: ev.mime }];
+      });
+    });
+    return unsub;
+  }, [sessionId]);
+
   // Reset + initial-fetch file list on session switch so:
   //  (a) stale rows from the previous session don't leak across, and
   //  (b) if the session already produced files BEFORE the logs window
@@ -431,22 +450,28 @@ export function LogsApp(): React.ReactElement {
           {errorMsg ?? done?.summary}
         </div>
       )}
-      <form
-        className="logs-followup"
-        onSubmit={(e) => { e.preventDefault(); void sendFollowUp(); }}
-      >
-        <span className="logs-followup__chevron">&rsaquo;</span>
-        <textarea
-          ref={inputRef}
-          className="logs-followup__input"
-          value={input}
-          placeholder={sessionId ? 'Follow up…' : 'No session'}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onInputKeyDown}
-          rows={1}
-          disabled={!sessionId || sending}
-        />
-      </form>
+      {sessionStatus === 'stopped' ? (
+        <div className="logs-followup logs-followup--ended" aria-live="polite">
+          <span className="logs-followup__ended-label">Session ended</span>
+        </div>
+      ) : (
+        <form
+          className="logs-followup"
+          onSubmit={(e) => { e.preventDefault(); void sendFollowUp(); }}
+        >
+          <span className="logs-followup__chevron">&rsaquo;</span>
+          <textarea
+            ref={inputRef}
+            className="logs-followup__input"
+            value={input}
+            placeholder={sessionId ? 'Follow up…' : 'No session'}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onInputKeyDown}
+            rows={1}
+            disabled={!sessionId || sending}
+          />
+        </form>
+      )}
     </div>
   );
 }

@@ -241,21 +241,29 @@ html, body {
   margin: 3px 4px;
 }
 
-/* Follow-up text input at the bottom. */
+/* Follow-up text input at the bottom — visually distinct so it reads as the
+   primary affordance of the logs window rather than a hairline footer. */
 .logs-followup {
   flex: 0 0 auto;
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 4px 6px 6px;
-  border-top: 1px solid var(--color-border-subtle, #1f232a);
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(125, 211, 252, 0.05);
+  border-top: 1px solid var(--color-accent, #7dd3fc);
+  transition: background 140ms ease;
+}
+
+.logs-followup:focus-within {
+  background: rgba(125, 211, 252, 0.10);
 }
 
 .logs-followup__chevron {
-  color: var(--color-fg-disabled, #5c6370);
-  font-size: 12px;
-  line-height: 18px;
-  padding-bottom: 2px;
+  color: var(--color-accent, #7dd3fc);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .logs-followup__input {
@@ -266,20 +274,37 @@ html, body {
   outline: none;
   color: var(--color-fg-primary, #d6d8dc);
   font-family: inherit;
-  font-size: 11px;
-  line-height: 14px;
-  max-height: 72px;
-  padding: 2px 0;
+  font-size: 13px;
+  line-height: 18px;
+  max-height: 90px;
+  padding: 0;
   -webkit-user-select: text;
   user-select: text;
 }
 
 .logs-followup__input::placeholder {
-  color: var(--color-fg-disabled, #5c6370);
+  color: var(--color-fg-secondary, #9aa2ad);
 }
 
 .logs-followup__input:disabled {
   opacity: 0.5;
+}
+
+/* Terminal state: session ended — replace the textarea with a label so the
+   user cannot type into a session that no longer accepts follow-ups. */
+.logs-followup--ended {
+  justify-content: center;
+  background: transparent;
+  border-top: 1px solid var(--color-border-subtle, #1f232a);
+}
+.logs-followup--ended:focus-within {
+  background: transparent;
+}
+.logs-followup__ended-label {
+  color: var(--color-fg-secondary, #9aa2ad);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* ============================================================= */
