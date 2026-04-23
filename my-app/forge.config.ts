@@ -137,7 +137,7 @@ const config: ForgeConfig = {
     new MakerDMG(
       {
         // background: 'assets/dmg-background.png',  // TODO: add DMG background art
-        // icon: 'assets/dmg-icon.icns',              // TODO: add volume icon
+        icon: 'assets/icon.icns',                     // volume + title-bar icon
         format: 'ULFO',   // ULFO = modern compressed format; smaller than UDZO
         overwrite: true,
       },
