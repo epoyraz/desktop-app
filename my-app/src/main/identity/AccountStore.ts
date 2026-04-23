@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mainLogger } from '../logger';
 
-export const ACCOUNT_FILE_NAME = 'account.json';
+const ACCOUNT_FILE_NAME = 'account.json';
 
 export interface AccountData {
   /** ISO 8601 — set once on first save, never overwritten */

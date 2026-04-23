@@ -72,7 +72,7 @@ function runCli(args: string[], timeoutMs = 5000): Promise<{ ok: boolean; stdout
 
 // ── adapter ─────────────────────────────────────────────────────────────────
 
-export const claudeCodeAdapter: EngineAdapter = {
+const claudeCodeAdapter: EngineAdapter = {
   id: ID,
   displayName: DISPLAY,
   binaryName: BIN,

@@ -11,24 +11,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import { mainLogger } from '../logger';
-import type { HlContext } from './context';
 
 import STOCK_HELPERS_JS from './stock/helpers.js?raw';
 import STOCK_TOOLS_JSON from './stock/TOOLS.json?raw';
 import STOCK_SKILL_MD from './stock/AGENTS.md?raw';
-
-export interface HarnessTool {
-  name: string;
-  description: string;
-  input_schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
-}
-
-export interface LoadedHarness {
-  tools: HarnessTool[];
-  dispatch: (ctx: HlContext, name: string, args: Record<string, unknown>) => Promise<unknown>;
-  helpersPath: string;
-  toolsPath: string;
-}
 
 export function harnessDir(): string {
   return path.join(app.getPath('userData'), 'harness');
@@ -83,49 +69,3 @@ export function bootstrapHarness(): void {
   }
 }
 
-/** Restore all stock files. Destroys user edits. */
-export function resetHarness(): void {
-  fs.writeFileSync(helpersPath(), STOCK_HELPERS_JS as string, 'utf-8');
-  fs.writeFileSync(skillPath(), STOCK_SKILL_MD as string, 'utf-8');
-  fs.writeFileSync(toolsPath(), STOCK_TOOLS_JSON as string, 'utf-8');
-  mainLogger.warn('harness.reset', { helpersPath: helpersPath(), skillPath: skillPath(), toolsPath: toolsPath() });
-}
-
-/**
- * LEGACY: used by the Anthropic-SDK agent loop in `agent.ts`. Retained so
- * that file compiles; the claude-subprocess path does not call this.
- * Throws if helpers.js doesn't export a `dispatch` table — which is now
- * the common case with the claude-subprocess helpers.js.
- */
-export function loadHarness(): LoadedHarness {
-  const hp = helpersPath();
-  const tp = toolsPath();
-
-  const rawTools = fs.readFileSync(tp, 'utf-8');
-  let tools: HarnessTool[];
-  try { tools = JSON.parse(rawTools) as HarnessTool[]; }
-  catch (err) { throw new Error(`harness TOOLS.json parse error: ${(err as Error).message}`); }
-  if (!Array.isArray(tools)) throw new Error('harness TOOLS.json must be an array');
-
-  const resolved = require.resolve(hp);
-  delete require.cache[resolved];
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require(resolved) as {
-    dispatch?: Record<string, (ctx: HlContext, args: Record<string, unknown>) => Promise<unknown>>;
-  };
-  const table = mod.dispatch;
-  if (!table || typeof table !== 'object') {
-    throw new Error('harness helpers.js has no `dispatch` export (claude-subprocess path — this code path is legacy)');
-  }
-
-  const dispatch = async (ctx: HlContext, name: string, args: Record<string, unknown>): Promise<unknown> => {
-    const fn = table[name];
-    if (typeof fn !== 'function') {
-      throw new Error(`harness has no dispatcher for tool "${name}"`);
-    }
-    return fn(ctx, args);
-  };
-
-  return { tools, dispatch, helpersPath: hp, toolsPath: tp };
-}

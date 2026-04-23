@@ -241,16 +241,4 @@ export class LoggerFactory {
 // Singleton exports
 // ---------------------------------------------------------------------------
 
-export const loggerFactory = new LoggerFactory();
-
-/** Pre-built channel loggers for the two always-present channels */
-export const mainLogger = loggerFactory.getLogger('main');
-export const daemonLogger = loggerFactory.getLogger('daemon');
-
-/**
- * Get a per-task logger. Called by Track B/D when a task starts.
- * Usage: const log = getTaskLogger('uuid-task-id')
- */
-export function getTaskLogger(taskId: string): ChannelLogger {
-  return loggerFactory.getLogger(`agent-task-${taskId}`);
-}
+export const mainLogger = new LoggerFactory().getLogger('main');

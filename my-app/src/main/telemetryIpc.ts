@@ -11,7 +11,6 @@ import { mainLogger } from './logger';
  * leakage of object graphs containing PII.
  */
 
-const HANDLERS = ['telemetry:capture'] as const;
 
 const MAX_EVENT_NAME = 64;
 const MAX_PROP_KEYS = 32;
@@ -47,6 +46,3 @@ export function registerTelemetryHandlers(): void {
   });
 }
 
-export function unregisterTelemetryHandlers(): void {
-  for (const ch of HANDLERS) ipcMain.removeHandler(ch);
-}

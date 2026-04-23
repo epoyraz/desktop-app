@@ -23,7 +23,7 @@ import type {
 import type { HlEvent } from '../../../shared/session-schemas';
 import type { WebContents } from 'electron';
 
-export async function resolveTargetIdForWebContents(wc: WebContents): Promise<string> {
+async function resolveTargetIdForWebContents(wc: WebContents): Promise<string> {
   const dbg = wc.debugger;
   const attachedByUs = !dbg.isAttached();
   if (attachedByUs) dbg.attach('1.3');

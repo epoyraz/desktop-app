@@ -2,12 +2,6 @@ import { ipcMain, shell } from 'electron';
 import { getConsent, setTelemetryConsent, type ConsentState } from './consent';
 import { mainLogger } from './logger';
 
-const HANDLERS = [
-  'consent:get',
-  'consent:set-telemetry',
-  'settings:open-system-notifications',
-] as const;
-
 export function registerConsentHandlers(): void {
   ipcMain.handle('consent:get', (): ConsentState => getConsent());
 
@@ -38,6 +32,3 @@ export function registerConsentHandlers(): void {
   });
 }
 
-export function unregisterConsentHandlers(): void {
-  for (const ch of HANDLERS) ipcMain.removeHandler(ch);
-}

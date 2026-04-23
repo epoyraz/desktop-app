@@ -17,7 +17,7 @@ import {
 export const API_KEY_SERVICE = 'com.browser-use.desktop.anthropic';
 export const OPENAI_KEY_SERVICE = 'com.browser-use.desktop.openai';
 export const OAUTH_SERVICE = 'com.browser-use.desktop.anthropic-oauth';
-export const AUTH_MODE_SERVICE = 'com.browser-use.desktop.auth-mode';
+const AUTH_MODE_SERVICE = 'com.browser-use.desktop.auth-mode';
 const DEFAULT_ACCOUNT = 'default';
 
 export type AuthMode = 'apiKey' | 'claudeCode';
@@ -29,7 +29,7 @@ export async function setAuthMode(mode: AuthMode): Promise<void> {
   mainLogger.info('authStore.setAuthMode', { mode });
 }
 
-export async function getAuthMode(): Promise<AuthMode | null> {
+async function getAuthMode(): Promise<AuthMode | null> {
   const keytar = getKeytar();
   if (!keytar) return null;
   try {

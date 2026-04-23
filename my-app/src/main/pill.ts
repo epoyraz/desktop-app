@@ -279,13 +279,6 @@ export function togglePill(): void {
 }
 
 /**
- * Returns true if the pill window is currently visible.
- */
-export function isPillVisible(): boolean {
-  if (!pillWindow || pillWindow.isDestroyed()) return false;
-  return pillWindow.isVisible();
-}
-
 /**
  * Send a channel+payload to the pill renderer via webContents.send.
  * Used by the main-process IPC hub to forward agent events.
@@ -330,18 +323,11 @@ export function forwardAgentEvent(event: AgentEvent): void {
 }
 
 /**
- * Get the pill BrowserWindow instance (may be null if not yet created).
- */
-export function getPillWindow(): BrowserWindow | null {
-  return pillWindow;
-}
-
-/**
  * Exported dimension constants — use these in IPC handlers to grow/shrink the pill.
  * COLLAPSED = idle/focused (56px input row only)
  * EXPANDED  = streaming or result state (input row + expanded section)
  */
-export { PILL_WIDTH, PILL_HEIGHT_COLLAPSED, PILL_HEIGHT_EXPANDED };
+export { PILL_HEIGHT_COLLAPSED, PILL_HEIGHT_EXPANDED };
 
 /**
  * Resize pill window height (grows downward as toast/result appear).

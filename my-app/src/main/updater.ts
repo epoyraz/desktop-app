@@ -53,7 +53,7 @@ export function shouldSkipUpdates(): boolean {
  * Configure the electron-updater autoUpdater instance. Split out for tests
  * so the lifecycle wiring can be verified without a real AppUpdater.
  */
-export function configureAutoUpdater(autoUpdater: AppUpdater): void {
+function configureAutoUpdater(autoUpdater: AppUpdater): void {
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: GITHUB_OWNER,
@@ -181,16 +181,3 @@ export function stopUpdater(): void {
   initialized = false;
 }
 
-/**
- * Test helper — reset module state between test cases.
- *
- * NOT exported from the public surface by convention; tests import the
- * symbol directly.
- */
-export function __resetUpdaterForTests(): void {
-  if (updateCheckTimer !== null) {
-    clearInterval(updateCheckTimer);
-    updateCheckTimer = null;
-  }
-  initialized = false;
-}

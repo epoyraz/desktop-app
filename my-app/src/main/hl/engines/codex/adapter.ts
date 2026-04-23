@@ -85,7 +85,7 @@ function isNarrativeItem(t: string | undefined): boolean {
   return t === 'reasoning' || t === 'agent_message' || t === 'assistant_message';
 }
 
-export const codexAdapter: EngineAdapter = {
+const codexAdapter: EngineAdapter = {
   id: ID,
   displayName: DISPLAY,
   binaryName: BIN,

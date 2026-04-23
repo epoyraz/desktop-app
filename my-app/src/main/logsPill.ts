@@ -433,11 +433,6 @@ export function updateLogsAnchor(anchor: PaneAnchor): void {
   logsWindow.setBounds(bounds);
 }
 
-export function isLogsVisible(): boolean {
-  if (!logsWindow || logsWindow.isDestroyed()) return false;
-  return logsWindow.isVisible();
-}
-
 /** Set the logs window display mode: 'dot' | 'normal' | 'full'. */
 export function setLogsMode(next: LogsMode): void {
   if (!logsWindow || logsWindow.isDestroyed()) return;
@@ -464,18 +459,6 @@ export function setLogsMode(next: LogsMode): void {
   safeSend('logs:mode-changed', mode);
 }
 
-export function getLogsMode(): LogsMode {
-  return mode;
-}
-
-export function sendToLogs(channel: string, payload: unknown): void {
-  safeSend(channel, payload);
-}
-
 export function getLogsWindow(): BrowserWindow | null {
   return logsWindow;
-}
-
-export function getActiveLogsSession(): string | null {
-  return activeSessionId;
 }

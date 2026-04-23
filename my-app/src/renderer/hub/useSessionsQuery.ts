@@ -108,8 +108,3 @@ export function useHydrateSession(id: string | null) {
   }, [id, qc]);
 }
 
-export function useInvalidateSessions() {
-  const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: SESSIONS_KEY });
-}
-

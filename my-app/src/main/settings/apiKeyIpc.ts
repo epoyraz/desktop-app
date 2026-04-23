@@ -281,18 +281,3 @@ export function registerApiKeyHandlers(): void {
   mainLogger.info('apiKeyIpc.register.ok');
 }
 
-export function unregisterApiKeyHandlers(): void {
-  ipcMain.removeHandler(CH_GET_STATUS);
-  ipcMain.removeHandler(CH_GET_MASKED);
-  ipcMain.removeHandler(CH_SAVE);
-  ipcMain.removeHandler(CH_TEST);
-  ipcMain.removeHandler(CH_DELETE);
-  ipcMain.removeHandler(CH_CC_AVAILABLE);
-  ipcMain.removeHandler(CH_CC_USE);
-  ipcMain.removeHandler(CH_OAI_GET_STATUS);
-  ipcMain.removeHandler(CH_OAI_SAVE);
-  ipcMain.removeHandler(CH_OAI_TEST);
-  ipcMain.removeHandler(CH_OAI_DELETE);
-  ipcMain.removeHandler(CH_CODEX_LOGOUT);
-  ipcMain.removeHandler(CH_CC_LOGOUT);
-}
