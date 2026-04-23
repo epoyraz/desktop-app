@@ -865,6 +865,13 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
       } else {
         api.sessions.viewResize(session.id, bounds);
       }
+      // Pulsing takeover overlay while the browser is being automated.
+      // Track the same bounds as the browser view so it always sits directly
+      // on top of the WebContentsView. Main process re-raises above the
+      // browser view on every attach/resize.
+      if (api.takeover?.show && session.status === 'running') {
+        void api.takeover.show(session.id, bounds);
+      }
       const p = paneEl.getBoundingClientRect();
       const o = outEl.getBoundingClientRect();
       const topReserve = showBrowserCta ? BROWSER_CTA_RESERVE : 0;
@@ -937,8 +944,20 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
       if (!api) return;
       console.log('[AgentPane] unmount -> detach', { id: session.id });
       api.sessions.viewDetach(session.id).catch(() => {});
+      api.takeover?.hide(session.id).catch(() => {});
     };
   }, [session.id]);
+
+  // Hide the takeover overlay whenever the session leaves 'running' state.
+  // Show is driven by the bounds-update effect above so it tracks the same
+  // rect as the browser view without a separate measurement path.
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.takeover) return;
+    if (session.status !== 'running') {
+      void api.takeover.hide(session.id);
+    }
+  }, [session.id, session.status]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -1066,15 +1085,6 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
         className="pane__output"
         ref={scrollRef}
       >
-        {showBrowserCta && (
-          <button
-            type="button"
-            className="pane__followup-hint pane__followup-hint--top"
-            onClick={(e) => { e.stopPropagation(); onOpenFollowUp?.(); }}
-          >
-            Press <kbd className="pane__followup-kbd">{followUpShortcut || 'f'}</kbd> to follow up
-          </button>
-        )}
         {session.error && entries.length <= 2 && (
           <div className="pane__error-center">
             <div className="pane__error-icon">

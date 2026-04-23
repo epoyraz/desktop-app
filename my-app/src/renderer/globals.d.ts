@@ -131,6 +131,14 @@ interface ElectronLogsAPI {
   updateAnchor: (anchor: { x: number; y: number; width: number; height: number }) => void;
 }
 
+interface ElectronTakeoverAPI {
+  show: (
+    sessionId: string,
+    bounds: { x: number; y: number; width: number; height: number },
+  ) => Promise<void>;
+  hide: (sessionId: string) => Promise<void>;
+}
+
 interface ElectronSettingsApiKeyAPI {
   getMasked: () => Promise<{ present: boolean; masked: string | null }>;
   getStatus: () => Promise<{
@@ -157,6 +165,7 @@ interface ElectronSettingsAPI {
 interface ElectronAPI {
   pill: ElectronPillAPI;
   logs?: ElectronLogsAPI;
+  takeover?: ElectronTakeoverAPI;
   sessions: ElectronSessionAPI;
   channels: ElectronChannelsAPI;
   hotkeys?: ElectronHotkeysAPI;

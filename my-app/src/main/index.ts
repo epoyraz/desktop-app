@@ -52,6 +52,7 @@ import { createShellWindow } from './window';
 // Track B — Pill + hotkeys
 import { createPillWindow, togglePill, showPill, hidePill, sendToPill, setPillHeight, PILL_HEIGHT_COLLAPSED, PILL_HEIGHT_EXPANDED } from './pill';
 import { createLogsWindow, attachToHub as attachLogsToHub, toggleLogs, hideLogs, getLogsWindow, showLogs, setLogsMode, updateLogsAnchor, focusLogsFollowUp } from './logsPill';
+import * as takeoverOverlay from './takeoverOverlay';
 import { sendSessionNotification } from './notifications';
 import { registerHotkeys, unregisterHotkeys, getGlobalCmdbarAccelerator, setGlobalCmdbarAccelerator } from './hotkeys';
 import { makeRequest, PROTOCOL_VERSION } from '../shared/types';
@@ -152,6 +153,7 @@ browserPool.setOnGone((sessionId) => {
   if (shellWindow && !shellWindow.isDestroyed()) {
     shellWindow.webContents.send('sessions:browser-gone', sessionId);
   }
+  takeoverOverlay.hide(sessionId, shellWindow);
 });
 const accountStore = new AccountStore();
 const whatsAppAdapter = new WhatsAppAdapter();
@@ -921,6 +923,9 @@ app.whenReady().then(async () => {
       if (attachedView && !attachedView.webContents.isDestroyed()) {
         attachedView.webContents.focus();
       }
+      // addChildView raises the browser view above any sibling we already
+      // have. Re-raise the takeover overlay so it stays on top.
+      takeoverOverlay.reraise(validatedId, shellWindow);
     }
     return ok;
   });
@@ -929,7 +934,32 @@ app.whenReady().then(async () => {
     const validatedId = assertString(id, 'id', 100);
     if (!shellWindow) return false;
     mainLogger.info('main.sessions:view-detach', { id: validatedId });
+    takeoverOverlay.hide(validatedId, shellWindow);
     return browserPool.detachFromWindow(validatedId, shellWindow);
+  });
+
+  // ---- Takeover overlay (pulsing glow + stop-and-take-over button) ----
+  ipcMain.handle('takeover:show', (_event, id: string, bounds: { x: number; y: number; width: number; height: number }) => {
+    const validatedId = assertString(id, 'id', 100);
+    if (!shellWindow) return;
+    takeoverOverlay.show(validatedId, shellWindow, bounds);
+    // The browser view was attached before us most of the time; reraise to
+    // guarantee our overlay paints above it.
+    takeoverOverlay.reraise(validatedId, shellWindow);
+  });
+
+  ipcMain.handle('takeover:hide', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    takeoverOverlay.hide(validatedId, shellWindow);
+  });
+
+  ipcMain.handle('takeover:stop', (_event, id: string) => {
+    const validatedId = assertString(id, 'id', 100);
+    mainLogger.info('main.takeover:stop', { id: validatedId });
+    try { sessionManager.cancelSession(validatedId); } catch (err) {
+      mainLogger.warn('main.takeover:stop.cancelError', { id: validatedId, error: (err as Error).message });
+    }
+    takeoverOverlay.hide(validatedId, shellWindow);
   });
 
   // Fast path: fire-and-forget. Called on every frame during window resize /
@@ -950,6 +980,11 @@ app.whenReady().then(async () => {
     if (!children.includes(view)) {
       shellWindow.contentView.addChildView(view);
     }
+    // Keep takeover overlay tracking the browser rect and sitting above it.
+    if (takeoverOverlay.hasOverlay(id)) {
+      takeoverOverlay.updateBounds(id, bounds);
+      takeoverOverlay.reraise(id, shellWindow);
+    }
   });
 
   ipcMain.handle('sessions:view-is-attached', (_event, id: string) => {
@@ -965,6 +1000,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sessions:views-detach-all', () => {
     if (!shellWindow) return;
+    takeoverOverlay.destroyAll(shellWindow);
     browserPool.detachAll(shellWindow);
   });
 

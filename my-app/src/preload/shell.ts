@@ -39,6 +39,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.send('logs:update-anchor', anchor);
     },
   },
+  takeover: {
+    show: (
+      sessionId: string,
+      bounds: { x: number; y: number; width: number; height: number },
+    ): Promise<void> => ipcRenderer.invoke('takeover:show', sessionId, bounds),
+    hide: (sessionId: string): Promise<void> => ipcRenderer.invoke('takeover:hide', sessionId),
+  },
   settings: {
     apiKey: {
       getMasked: (): Promise<{ present: boolean; masked: string | null }> =>
