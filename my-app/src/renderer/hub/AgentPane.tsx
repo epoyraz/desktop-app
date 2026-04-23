@@ -846,7 +846,14 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
 
     let lastKey = '';
     let hasAttached = false;
+    // Tracks whether the last viewAttach actually got a browser view. If
+    // false, this is a non-browser task (e.g. bash) — we skip the takeover
+    // overlay so it doesn't float over an empty black pane.
+    let attachSucceeded = false;
     let rafScheduled = 0;
+    // Polling retry for the "follow-up that creates a browser mid-run"
+    // case. Cleared on effect teardown; reset to 0 when it fires.
+    let retryTimer: ReturnType<typeof setTimeout> | 0 = 0;
     const applyBounds = () => {
       rafScheduled = 0;
       const outEl = paneEl.querySelector('.pane__output') as HTMLElement | null;
@@ -857,20 +864,61 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
       const key = `${bounds.x}|${bounds.y}|${bounds.width}|${bounds.height}`;
       if (key === lastKey) return;
       lastKey = key;
+      // Overlay only makes sense when the agent is actually driving a
+      // browser. `attachSucceeded` is necessary but not sufficient: a
+      // browser view is created at session start for every task (even
+      // "hi"), so we further gate on `session.primarySite` — set by the
+      // SessionManager once the agent navigates somewhere real. If the
+      // session never navigates (pure bash/chat task), overlay stays off.
+      const isAutomating =
+        attachSucceeded &&
+        session.status === 'running' &&
+        !!session.primarySite;
+
       if (!hasAttached) {
+        // Optimistically mark so we don't fire overlapping attach IPC on the
+        // same bounds tick. We'll flip back on failure so the next retry
+        // (scheduled below) picks it up — important for "hi" → follow-up-
+        // with-browser flows where the browser isn't ready the first time
+        // we ask.
         hasAttached = true;
         api.sessions.viewAttach(session.id, bounds).then((ok) => {
-          if (!ok) setBrowserMissing(true); else setBrowserMissing(false);
-        }).catch(() => {});
+          if (!ok) {
+            attachSucceeded = false;
+            hasAttached = false;
+            setBrowserMissing(true);
+            api.takeover?.hide(session.id).catch(() => {});
+            // ResizeObserver won't re-fire on its own if the pane's bounds
+            // are unchanged — schedule a time-based retry while the session
+            // is still running, in case the agent creates a browser a bit
+            // after the status flipped to running.
+            if (session.status === 'running' && !retryTimer) {
+              retryTimer = window.setTimeout(() => {
+                retryTimer = 0;
+                lastKey = '';
+                updateBounds();
+              }, 800);
+            }
+          } else {
+            attachSucceeded = true;
+            setBrowserMissing(false);
+            if (session.status === 'running' && session.primarySite) {
+              void api.takeover?.show(session.id, bounds);
+            } else {
+              api.takeover?.hide(session.id).catch(() => {});
+            }
+          }
+        }).catch(() => {
+          hasAttached = false;
+          attachSucceeded = false;
+        });
       } else {
         api.sessions.viewResize(session.id, bounds);
-      }
-      // Pulsing takeover overlay while the browser is being automated.
-      // Track the same bounds as the browser view so it always sits directly
-      // on top of the WebContentsView. Main process re-raises above the
-      // browser view on every attach/resize.
-      if (api.takeover?.show && session.status === 'running') {
-        void api.takeover.show(session.id, bounds);
+        if (isAutomating) {
+          void api.takeover?.show(session.id, bounds);
+        } else {
+          api.takeover?.hide(session.id).catch(() => {});
+        }
       }
       const p = paneEl.getBoundingClientRect();
       const o = outEl.getBoundingClientRect();
@@ -935,8 +983,9 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
       observer.disconnect();
       window.removeEventListener('pane:layout-change', onLayoutChange);
       if (rafScheduled) cancelAnimationFrame(rafScheduled);
+      if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [session.id, computeBounds, browserDead, session.status, showBrowserCta]);
+  }, [session.id, computeBounds, browserDead, session.status, session.primarySite, showBrowserCta]);
 
   useEffect(() => {
     return () => {
@@ -1052,7 +1101,7 @@ export function AgentPane({ session, focused, onRerun, onFollowUp, onDismiss, on
         {session.status === 'running' && <div className="pane__progress-bar" />}
       </div>
 
-      {frameRect && (browserDead || browserMissing || session.status === 'draft') && (
+      {frameRect && (browserDead || browserMissing || session.status === 'draft') && !(session.error && entries.length <= 2) && (
         <div
           className="pane__browser-frame"
           style={{

@@ -176,9 +176,18 @@ export const TaskInput = forwardRef<TaskInputHandle, TaskInputProps>(function Ta
     focus: () => textareaRef.current?.focus(),
   }), [addFiles]);
 
+  const focusTextareaOnBoxClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      textareaRef.current?.focus();
+    }
+  }, []);
+
   return (
     <div className="task-input">
-      <div className={`task-input__box${focused ? ' task-input__box--focused' : ''}`}>
+      <div
+        className={`task-input__box${focused ? ' task-input__box--focused' : ''}`}
+        onClick={focusTextareaOnBoxClick}
+      >
         {attachments.length > 0 && (
           <div className="task-input__chips">
             {attachments.map((a, i) => (
@@ -210,7 +219,7 @@ export const TaskInput = forwardRef<TaskInputHandle, TaskInputProps>(function Ta
           rows={1}
           aria-label="New agent task"
         />
-        <div className="task-input__actions">
+        <div className="task-input__actions" onClick={focusTextareaOnBoxClick}>
           <button
             type="button"
             className="task-input__attach has-tooltip"

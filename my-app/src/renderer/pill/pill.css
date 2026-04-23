@@ -27,7 +27,9 @@ html, body {
 .cmdbar {
   width: 100%;
   height: 100%;
-  background-color: var(--color-bg-overlay);
+  background-color: var(--color-bg-base);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   color: var(--color-fg-primary);
   position: relative;
@@ -71,7 +73,7 @@ html, body {
 
 .cmdbar__input-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-3);
   padding: var(--space-6) var(--space-6);
 }
@@ -101,8 +103,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
   background-color: var(--color-fg-primary);
   color: var(--color-bg-sunken);
@@ -266,8 +268,8 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   line-height: 0;
   color: var(--color-fg-secondary, #c8c8c8);
@@ -285,6 +287,16 @@ html, body {
 .cmdbar__attach:hover {
   color: var(--color-fg-primary, #fff);
   background-color: var(--color-bg-elevated, #222);
+}
+
+.cmdbar__attach.has-tooltip::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(-2px);
+}
+.cmdbar__attach.has-tooltip:hover::after,
+.cmdbar__attach.has-tooltip:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ---------------------------------------------------------------------------
@@ -324,3 +336,133 @@ html, body {
   transform: translateX(-50%) translateY(0);
 }
 
+/* EnginePicker — shared with hub's TaskInput. Duplicated from hub.css so
+   the pill renderer (which doesn't import hub.css) can style it correctly.
+   Without these rules the raw SVG logo renders at its intrinsic 316×320. */
+.engine-logo {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-primary);
+  flex-shrink: 0;
+}
+.engine-logo svg { width: 14px; height: 14px; }
+
+.engine-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+.engine-picker__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg-elevated);
+  color: var(--color-fg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.engine-picker__toggle:hover {
+  background-color: var(--color-bg-hover, var(--color-border-subtle));
+  color: var(--color-fg-primary);
+}
+.engine-picker__name { white-space: nowrap; }
+.engine-picker__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-status-warning, #e5a23b);
+}
+.engine-picker__menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  z-index: 40;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.engine-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+.engine-picker__item--active { background-color: var(--color-bg-sunken); }
+.engine-picker__item-select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--color-fg-primary);
+  text-align: left;
+  padding: 6px 8px;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.engine-picker__item-select:hover {
+  background-color: var(--color-bg-hover, var(--color-border-subtle));
+}
+.engine-picker__item-name { flex: 1; }
+.engine-picker__check {
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-xs);
+}
+.engine-picker__item-login {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-secondary);
+  font-size: var(--font-size-xs);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-right: 4px;
+}
+.engine-picker__item-login:hover:not(:disabled) {
+  color: var(--color-fg-primary);
+  background-color: var(--color-bg-hover, var(--color-border-subtle));
+}
+.engine-picker__item-login:disabled { opacity: 0.6; cursor: default; }
+.engine-picker__item-hint {
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-xs);
+  padding-right: 8px;
+}
+
+/* Pill-scoped overrides: the pill BrowserWindow can't draw above its top
+   edge, so flip the dropdown downward. Also push the picker away from the
+   paperclip with margin-left:auto so it feels intentional, not crammed. */
+.cmdbar__engine-picker {
+  margin-left: auto;
+}
+.cmdbar__engine-picker .engine-picker__toggle {
+  height: 28px;
+  background-color: transparent;
+  border-color: var(--color-border-subtle);
+  color: var(--color-fg-primary);
+}
+.cmdbar__engine-picker .engine-picker__toggle:hover {
+  background-color: var(--color-bg-elevated);
+  color: var(--color-fg-primary);
+}
+.cmdbar__engine-picker .engine-picker__menu {
+  top: calc(100% + 4px);
+  bottom: auto;
+}
