@@ -31,14 +31,10 @@ import { makeRequest, PROTOCOL_VERSION } from '../shared/types';
 import type { AgentEvent } from '../shared/types';
 // Identity
 import { AccountStore } from './identity/AccountStore';
-import { OAuthClient } from './identity/OAuthClient';
-import { KeychainStore } from './identity/KeychainStore';
 import { createOnboardingWindow } from './identity/onboardingWindow';
 import { registerOnboardingHandlers, unregisterOnboardingHandlers } from './identity/onboardingHandlers';
 import { registerApiKeyHandlers } from './settings/apiKeyIpc';
 import { registerChromeImportHandlers, unregisterChromeImportHandlers } from './chrome-import/ipc';
-import { performSignOut, turnOffSync } from './identity/SignOutController';
-import type { SignOutMode } from './identity/SignOutController';
 import { mainLogger } from './logger';
 import {
   resolveUserDataDir,
@@ -131,10 +127,6 @@ browserPool.setOnGone((sessionId) => {
   }
 });
 const accountStore = new AccountStore();
-const oauthClient = new OAuthClient({
-  clientId: process.env.GOOGLE_CLIENT_ID ?? '42357852543-62lvdghq5hatidr3ovmq1rig9q5r5mcg.apps.googleusercontent.com',
-});
-const keychainStore = new KeychainStore();
 const whatsAppAdapter = new WhatsAppAdapter();
 const channelRouter = new ChannelRouter(sessionManager, whatsAppAdapter);
 
@@ -1010,28 +1002,6 @@ app.whenReady().then(async () => {
     mainLogger.debug('main.shell:set-overlay', { active });
     // Overlay state forwarded to shell window if needed
     shellWindow?.webContents.send('overlay-changed', active);
-  });
-
-  // ---------------------------------------------------------------------------
-  // Identity / sign-out IPC
-  // ---------------------------------------------------------------------------
-  ipcMain.handle('identity:sign-out', async (_event, mode: string) => {
-    mainLogger.info('main.identity:sign-out', { mode });
-    const signOutMode: SignOutMode = mode === 'clear' ? 'clear' : 'keep';
-    const result = await performSignOut(signOutMode, accountStore, keychainStore);
-    mainLogger.info('main.identity:sign-out.complete', { success: result.success, mode: result.mode });
-    return result;
-  });
-
-  ipcMain.handle('identity:turn-off-sync', async () => {
-    mainLogger.info('main.identity:turn-off-sync');
-    return turnOffSync(accountStore);
-  });
-
-  ipcMain.handle('identity:get-account', () => {
-    const account = accountStore.load();
-    mainLogger.debug('main.identity:get-account', { hasAccount: !!account });
-    return account;
   });
 
   // ---------------------------------------------------------------------------

@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
@@ -33,56 +32,16 @@ const IS_MAC = process.platform === 'darwin';
 const SHOULD_SIGN = IS_MAC && !SKIP_SIGNING && SIGNING_IDENTITY !== '';
 
 // ---------------------------------------------------------------------------
-// PyInstaller binary path
-// ---------------------------------------------------------------------------
-// The daemon binary is placed in extraResource so Forge copies it to
-// Contents/Resources/ in the .app bundle.
-// asarUnpack ensures it also lands in app.asar.unpacked/python/agent_daemon
-// making it accessible at runtime via process.resourcesPath.
-//
-// Runtime path resolution (in main process — use utilityProcess to spawn):
-//   const daemonBin = app.isPackaged
-//     ? path.join(process.resourcesPath, 'agent_daemon')
-//     : path.join(__dirname, '../../python/dist/agent_daemon');
-
-const DAEMON_BINARY = path.resolve(__dirname, 'python/dist/agent_daemon');
-
-// Only include the daemon binary in extraResource if it has been built.
-// This allows `npm run package` to succeed in CI lint/type-check jobs that
-// run before the PyInstaller build step. The release workflow always runs
-// python/build.sh before npm run make, so DAEMON_BINARY_EXISTS is true there.
-const DAEMON_BINARY_EXISTS = fs.existsSync(DAEMON_BINARY);
-
-// ---------------------------------------------------------------------------
 // Forge configuration
 // ---------------------------------------------------------------------------
 
 const config: ForgeConfig = {
   packagerConfig: {
-    // asar: was `true`. Newer @electron/packager moved `asarUnpack` under
-    // `asar.unpack` (glob string, not array), so we now nest the unpack
-    // pattern here. The PyInstaller binary MUST be outside the asar — asar
-    // files are virtual archives and an executable inside one cannot be
-    // directly execv'd by the OS. OnlyLoadAppFromAsar: true fuse enforces
-    // that app JS loads from asar; it does NOT prevent extraResource
-    // binaries from living outside asar.
-    asar: {
-      unpack: '**/python/agent_daemon/**',
-    },
+    asar: true,
     // `productName` was removed from ForgePackagerOptions in newer
     // @electron/packager; the field is now `name`. The runtime semantics
     // are identical: the bundled .app/.exe will be named after this.
     name: 'Browser Use',
-
-    // extraResource: files/dirs copied verbatim into Contents/Resources/.
-    // agent_daemon ends up at: Contents/Resources/agent_daemon
-    // After asarUnpack it is also at: Contents/Resources/app.asar.unpacked/python/agent_daemon
-    // NOTE: run python/build.sh before npm run make to produce this binary.
-    // The conditional prevents packaging failures in CI steps that run before
-    // the PyInstaller build step (e.g. lint, type-check, npm run package).
-    ...(DAEMON_BINARY_EXISTS && {
-      extraResource: [DAEMON_BINARY],
-    }),
 
     // macOS bundle identity — only set when credentials are available.
     ...(SHOULD_SIGN && {
@@ -209,8 +168,7 @@ const config: ForgeConfig = {
       // KEEP FALSE — security hardening. Prevents ELECTRON_RUN_AS_NODE env var
       // from turning the Electron binary into a raw Node.js process. If true,
       // any attacker who can set env vars gets arbitrary code execution as the
-      // app user. The Python daemon is spawned via utilityProcess, NOT via
-      // child_process.fork (which requires RunAsNode). See ADR §12.
+      // app user.
       [FuseV1Options.RunAsNode]: false,
 
       // KEEP TRUE — encrypts cookies at rest using the OS keychain-backed key.
@@ -237,9 +195,6 @@ const config: ForgeConfig = {
       // from the asar archive (not loose files). Combined with
       // EnableEmbeddedAsarIntegrityValidation, this prevents an attacker
       // from replacing asar contents with a malicious file.
-      // IMPORTANT: The PyInstaller daemon binary is an extraResource placed
-      // OUTSIDE the asar (in Contents/Resources/ and app.asar.unpacked/).
-      // This fuse does NOT block it — it only governs JS module loading.
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],

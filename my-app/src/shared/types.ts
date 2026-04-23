@@ -235,63 +235,6 @@ export type TabEvent =
   | TabReorderedEvent
   | TabsRestoredEvent;
 
-// ---------------------------------------------------------------------------
-// Onboarding (renderer ↔ Electron main)
-// ---------------------------------------------------------------------------
-
-export type GoogleOAuthScope =
-  | "https://www.googleapis.com/auth/gmail.readonly"
-  | "https://www.googleapis.com/auth/calendar"
-  | "https://www.googleapis.com/auth/spreadsheets"
-  | "https://www.googleapis.com/auth/drive"
-  | "https://www.googleapis.com/auth/documents";
-
-export interface AccountInfo {
-  email: string;
-  display_name?: string;
-  avatar_url?: string;
-}
-
-export interface OnboardingCompleteEvent {
-  version: ProtocolVersion;
-  event: "onboarding-complete";
-  agent_name: string;
-  account: AccountInfo;
-  oauth_scopes: GoogleOAuthScope[];
-}
-
-export interface SetAgentNameRequest {
-  version: ProtocolVersion;
-  meta: "set_agent_name";
-  agent_name: string;
-}
-
-export interface GetAgentNameResponse {
-  version: ProtocolVersion;
-  meta: "get_agent_name_response";
-  agent_name: string;
-}
-
-export interface OAuthStartRequest {
-  version: ProtocolVersion;
-  meta: "oauth_start";
-  scopes: GoogleOAuthScope[];
-}
-
-export interface OAuthCallbackEvent {
-  version: ProtocolVersion;
-  event: "oauth-callback";
-  success: boolean;
-  account?: AccountInfo;
-  error?: string;
-}
-
-export type OnboardingMessage =
-  | OnboardingCompleteEvent
-  | SetAgentNameRequest
-  | GetAgentNameResponse
-  | OAuthStartRequest
-  | OAuthCallbackEvent;
 
 // ---------------------------------------------------------------------------
 // Runtime validation helpers (inline, no external deps)

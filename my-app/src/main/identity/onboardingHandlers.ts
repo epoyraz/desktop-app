@@ -359,8 +359,6 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
 
     const existing = accountStore.load();
     accountStore.save({
-      agent_name: existing?.agent_name ?? '',
-      email: existing?.email ?? '',
       created_at: existing?.created_at,
       onboarding_completed_at: new Date().toISOString(),
     });
