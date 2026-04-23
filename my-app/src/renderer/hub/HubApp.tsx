@@ -311,6 +311,14 @@ export function HubApp(): React.ReactElement {
     });
   }, [viewMode, gridColumns, gridPage]);
 
+  // Logs overlay is anchored to the AgentPane, which only renders in 'grid'
+  // view. Hide it whenever the user switches away so it doesn't float over
+  // the dashboard / list UI.
+  useEffect(() => {
+    if (viewMode === 'grid') return;
+    window.electronAPI?.logs?.close?.().catch(() => {});
+  }, [viewMode]);
+
   const pendingFocusIdRef = useRef<string | null>(null);
 
   useEffect(() => {
