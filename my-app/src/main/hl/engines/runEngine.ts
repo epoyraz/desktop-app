@@ -11,7 +11,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mainLogger } from '../../logger';
-import { resolveAuth } from '../../identity/authStore';
+import { resolveAuth, loadOpenAIKey } from '../../identity/authStore';
 import { helpersPath, toolsPath, skillPath } from '../harness';
 import { get as getAdapter } from './registry';
 import type {
@@ -99,14 +99,47 @@ export async function runEngine(opts: RunEngineOptions): Promise<void> {
     }
   }
 
-  // 3. Resolve auth (saved API key vs CLI-managed).
+  // 3. Resolve auth. Per-engine keychain slots: Claude reads the Anthropic
+  //    key via resolveAuth(), Codex reads its OpenAI slot. Each adapter gets
+  //    the key appropriate to its provider so we can't accidentally send an
+  //    Anthropic key to OpenAI (or vice versa).
   let savedApiKey: string | undefined;
+  let cliAuthed = false;
   try {
-    const auth = await resolveAuth();
-    if (auth?.type === 'apiKey') savedApiKey = auth.value;
+    if (adapter.id === 'codex') {
+      const k = await loadOpenAIKey();
+      if (k) savedApiKey = k;
+      cliAuthed = (await adapter.probeAuthed()).authed;
+    } else {
+      const auth = await resolveAuth();
+      if (auth?.type === 'apiKey') savedApiKey = auth.value;
+      cliAuthed = (await adapter.probeAuthed()).authed;
+    }
   } catch (err) {
     mainLogger.warn('engines.run.auth.resolveFailed', { error: (err as Error).message });
   }
+  // Headline auth-path log — greppable: `session.auth.path`. Tells you
+  // which of the three cases this session falls into:
+  //   - 'apiKey'       → using saved API key (ANTHROPIC / OPENAI env var)
+  //   - 'subscription' → using the CLI's own OAuth (Claude Keychain / Codex auth.json)
+  //   - 'both'         → both are available; we chose `chosen` (apiKey wins
+  //                      because the adapter's buildEnv sets the env var when
+  //                      savedApiKey is present)
+  const authPath: 'apiKey' | 'subscription' | 'both' | 'none' =
+    savedApiKey && cliAuthed ? 'both'
+    : savedApiKey ? 'apiKey'
+    : cliAuthed ? 'subscription'
+    : 'none';
+  const chosen: 'apiKey' | 'subscription' | 'none' =
+    savedApiKey ? 'apiKey' : cliAuthed ? 'subscription' : 'none';
+  mainLogger.info('session.auth.path', {
+    sessionId: opts.sessionId,
+    engineId: adapter.id,
+    path: authPath,
+    chosen,
+    hasSavedKey: Boolean(savedApiKey),
+    cliAuthed,
+  });
 
   // 4. Build spawn context + let adapter compose args/env/prompt.
   const spawnCtx: SpawnContext = {
@@ -288,6 +321,12 @@ export async function runEngine(opts: RunEngineOptions): Promise<void> {
         opts.onEvent({ type: 'error', message: `${adapter.id}_exit: ${detail.slice(-800)}` });
       } else if (code !== 0) {
         mainLogger.warn('engines.run.exit.postDoneNonZero', { engineId: adapter.id, code, stderrTail: stderrBuf.slice(-200) });
+      } else if (!doneEmitted) {
+        // Clean exit (code 0) but the adapter never emitted `done`. Without
+        // this fallback the session would hang in 'running' until the stuck
+        // timer fires, and follow-ups would fail (need 'idle' status).
+        mainLogger.info('engines.run.exit.cleanNoDone', { engineId: adapter.id, msg: 'emitting synthetic done' });
+        opts.onEvent({ type: 'done', summary: 'completed', iterations: 0 });
       }
       resolve();
     });

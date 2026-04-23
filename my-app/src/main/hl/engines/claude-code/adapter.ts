@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import { shell } from 'electron';
 import { mainLogger } from '../../../logger';
 import { register } from '../registry';
+import { enrichedEnv } from '../pathEnrich';
 import type {
   AuthProbe,
   EngineAdapter,
@@ -59,7 +60,7 @@ function stringifyToolResult(content: unknown): { text: string; isError: boolean
 function runCli(args: string[], timeoutMs = 5000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     let child;
-    try { child = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
+    try { child = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() }); }
     catch { resolve({ ok: false, stdout: '', stderr: 'spawn failed' }); return; }
     let stdout = ''; let stderr = '';
     child.stdout.on('data', (d) => (stdout += String(d)));
@@ -140,7 +141,7 @@ export const claudeCodeAdapter: EngineAdapter = {
   },
 
   buildEnv(ctx: SpawnContext, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    const env = { ...baseEnv };
+    const env = enrichedEnv(baseEnv);
     // Strip every env that outranks subscription OAuth so Keychain auth wins.
     // Precedence (per Claude Code docs): cloud-provider envs > ANTHROPIC_AUTH_TOKEN
     // > ANTHROPIC_API_KEY > apiKeyHelper > CLAUDE_CODE_OAUTH_TOKEN > subscription OAuth.

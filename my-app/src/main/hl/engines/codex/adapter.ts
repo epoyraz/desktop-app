@@ -22,6 +22,7 @@ import { spawn } from 'node:child_process';
 import { shell } from 'electron';
 import { mainLogger } from '../../../logger';
 import { register } from '../registry';
+import { enrichedEnv } from '../pathEnrich';
 import type {
   AuthProbe,
   EngineAdapter,
@@ -39,7 +40,7 @@ const BIN = 'codex';
 function runCli(args: string[], timeoutMs = 5000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     let child;
-    try { child = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
+    try { child = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() }); }
     catch { resolve({ ok: false, stdout: '', stderr: 'spawn failed' }); return; }
     let stdout = ''; let stderr = '';
     child.stdout.on('data', (d) => (stdout += String(d)));
@@ -158,7 +159,7 @@ export const codexAdapter: EngineAdapter = {
   },
 
   buildEnv(ctx: SpawnContext, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    const env = { ...baseEnv };
+    const env = enrichedEnv(baseEnv);
     // `OPENAI_API_KEY` silently overrides OAuth auth.json per upstream issue
     // #15151 — strip it unless the user has explicitly saved a key.
     delete env.OPENAI_API_KEY;
@@ -248,8 +249,16 @@ export const codexAdapter: EngineAdapter = {
     }
 
     if (type === 'turn.completed') {
-      // Usage telemetry; nothing user-facing. Runner emits `done` on process close.
-      return { events };
+      // Codex has no dedicated "done" tool the way Claude does — `turn.completed`
+      // is the closest signal. Emit `done` here so SessionManager flips the
+      // session to 'idle' (enabling follow-ups) instead of waiting for the
+      // 2-minute stuck timer to fire after process exit.
+      const usage = (e.usage as Record<string, unknown> | undefined) ?? {};
+      const outTok = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
+      const summary = outTok > 0 ? `turn complete (${outTok} output tokens)` : 'turn complete';
+      events.push({ type: 'done', summary, iterations: ctx.iter });
+      mainLogger.info('codex.turnCompleted.done', { outputTokens: outTok, iter: ctx.iter });
+      return { events, terminalDone: true };
     }
 
     if (type === 'turn.failed' || type === 'error') {
