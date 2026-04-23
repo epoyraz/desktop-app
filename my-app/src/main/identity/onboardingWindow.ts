@@ -76,7 +76,7 @@ export function createOnboardingWindow(): BrowserWindow {
   });
   // Load the onboarding renderer
   if (typeof ONBOARDING_VITE_DEV_SERVER_URL !== 'undefined' && ONBOARDING_VITE_DEV_SERVER_URL) {
-    const url = `${ONBOARDING_VITE_DEV_SERVER_URL}/onboarding.html`;
+    const url = `${ONBOARDING_VITE_DEV_SERVER_URL}/src/renderer/onboarding/onboarding.html`;
     mainLogger.debug('onboardingWindow.loadURL', { url });
     void win.loadURL(url);
   } else {
@@ -84,7 +84,7 @@ export function createOnboardingWindow(): BrowserWindow {
     const name = typeof ONBOARDING_VITE_NAME !== 'undefined' ? ONBOARDING_VITE_NAME : 'onboarding';
     const filePath = path.join(
       __dirname,
-      `../../renderer/${name}/onboarding.html`,
+      `../renderer/${name}/src/renderer/onboarding/onboarding.html`,
     );
     mainLogger.debug('onboardingWindow.loadFile', { filePath });
     void win.loadFile(filePath);

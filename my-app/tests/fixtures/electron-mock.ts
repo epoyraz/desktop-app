@@ -11,7 +11,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-const userDataPath = path.join(os.tmpdir(), 'AgenticBrowser-test');
+const userDataPath = path.join(os.tmpdir(), 'BrowserUseDesktop-test');
 
 export const app = {
   getPath: (name: string): string => {
@@ -21,7 +21,7 @@ export const app = {
     return userDataPath;
   },
   getVersion: (): string => '0.1.0-test',
-  getName: (): string => 'AgenticBrowser',
+  getName: (): string => 'Browser Use',
   isReady: (): boolean => true,
   whenReady: (): Promise<void> => Promise.resolve(),
   // Default to unpackaged so dev-only code paths (auto-updater skip, etc.)

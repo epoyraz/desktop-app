@@ -11,7 +11,6 @@
  */
 
 import { spawn } from 'node:child_process';
-import { shell } from 'electron';
 import { mainLogger } from '../../../logger';
 import { register } from '../registry';
 import { enrichedEnv } from '../pathEnrich';
@@ -91,18 +90,40 @@ export const claudeCodeAdapter: EngineAdapter = {
   },
 
   async openLoginInTerminal(): Promise<{ opened: boolean; error?: string }> {
-    if (process.platform !== 'darwin') {
-      shell.openExternal('https://code.claude.com/docs/en/authentication').catch(() => {});
-      return { opened: false, error: 'macOS only — follow docs to run `claude login`' };
-    }
-    const script = `tell application "Terminal"\nactivate\ndo script "claude login"\nend tell`;
+    // Shortcut the interactive chooser: jump straight into the subscription
+    // OAuth flow and let Claude open the browser itself.
     return new Promise((resolve) => {
-      const osa = spawn('osascript', ['-e', script]);
+      const child = spawn(BIN, ['auth', 'login', '--claudeai'], { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() });
+      let stdoutBuf = '';
       let stderrBuf = '';
-      osa.stderr.on('data', (d) => (stderrBuf += String(d)));
-      osa.on('close', (code) => {
-        if (code === 0) resolve({ opened: true });
-        else resolve({ opened: false, error: stderrBuf.trim() || `osascript exit ${code}` });
+      let settled = false;
+      const finish = (result: { opened: boolean; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      const timer = setTimeout(() => {
+        mainLogger.warn('claude-code.login.timeout');
+        try { child.kill('SIGTERM'); } catch { /* already closed */ }
+      }, 5 * 60 * 1000);
+
+      child.stdout.on('data', (d) => { stdoutBuf += String(d); if (stdoutBuf.length > 4096) stdoutBuf = stdoutBuf.slice(-4096); });
+      child.stderr.on('data', (d) => { stderrBuf += String(d); if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096); });
+      child.on('spawn', () => {
+        mainLogger.info('claude-code.login.spawn');
+        finish({ opened: true });
+      });
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        mainLogger.warn('claude-code.login.error', { error: err.message });
+        finish({ opened: false, error: err.message });
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        mainLogger.info('claude-code.login.close', { code, stderr: stderrBuf.slice(-400) });
+        if (code !== 0 && !settled) {
+          finish({ opened: false, error: stderrBuf.trim() || stdoutBuf.trim() || `claude auth login exit ${code}` });
+        }
       });
     });
   },

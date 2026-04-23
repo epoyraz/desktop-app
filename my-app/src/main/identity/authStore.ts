@@ -3,8 +3,8 @@
  * Handles auto-refresh of OAuth access tokens.
  *
  * Storage layout in macOS Keychain (via keytar):
- *   service = "com.agenticbrowser.anthropic",       account = "default"  -> API key (sk-ant-api03-...)
- *   service = "com.agenticbrowser.anthropic-oauth", account = "default"  -> JSON credentials
+ *   service = "com.browser-use.desktop.anthropic",       account = "default"  -> API key (sk-ant-api03-...)
+ *   service = "com.browser-use.desktop.anthropic-oauth", account = "default"  -> JSON credentials
  */
 
 import { mainLogger } from '../logger';
@@ -14,10 +14,10 @@ import {
   type ClaudeOAuthCredentials,
 } from './claudeCodeAuth';
 
-export const API_KEY_SERVICE = 'com.agenticbrowser.anthropic';
-export const OPENAI_KEY_SERVICE = 'com.agenticbrowser.openai';
-export const OAUTH_SERVICE = 'com.agenticbrowser.anthropic-oauth';
-export const AUTH_MODE_SERVICE = 'com.agenticbrowser.auth-mode';
+export const API_KEY_SERVICE = 'com.browser-use.desktop.anthropic';
+export const OPENAI_KEY_SERVICE = 'com.browser-use.desktop.openai';
+export const OAUTH_SERVICE = 'com.browser-use.desktop.anthropic-oauth';
+export const AUTH_MODE_SERVICE = 'com.browser-use.desktop.auth-mode';
 const DEFAULT_ACCOUNT = 'default';
 
 export type AuthMode = 'apiKey' | 'claudeCode';

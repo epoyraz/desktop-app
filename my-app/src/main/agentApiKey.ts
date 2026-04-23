@@ -11,7 +11,7 @@
 import { mainLogger } from './logger';
 import { resolveAuth, type ResolvedAuth } from './identity/authStore';
 
-export const API_KEY_KEYCHAIN_SERVICE = 'com.agenticbrowser.anthropic';
+export const API_KEY_KEYCHAIN_SERVICE = 'com.browser-use.desktop.anthropic';
 
 export interface KeytarLike {
   getPassword(service: string, account: string): Promise<string | null>;

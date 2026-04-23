@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agenticbrowser.local/schemas/agent_task.schema.json",
+  "$id": "https://browser-use.local/schemas/agent_task.schema.json",
   "title": "AgentTaskMessages",
   "description": "Request messages sent from Electron main to Python daemon over Unix socket",
   "version": "1.0",

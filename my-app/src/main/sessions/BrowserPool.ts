@@ -105,6 +105,33 @@ export class BrowserPool {
       height: DEFAULT_BROWSER_HEIGHT,
     });
 
+    // Anti-detection: strip the `Electron/x.y.z` token from the default UA so
+    // bot walls (Cloudflare, Akamai, Datadome) stop white-paging us. We leave
+    // every other byte of the UA untouched — real Chromium version, real OS,
+    // real WebKit — so behavior and feature-detection stay identical.
+    try {
+      const defaultUa = view.webContents.getUserAgent();
+      const cleanedUa = defaultUa.replace(/\sElectron\/\S+/, '');
+      if (cleanedUa !== defaultUa) {
+        view.webContents.setUserAgent(cleanedUa);
+        mainLogger.info('BrowserPool.userAgent.stripped', { sessionId, before: defaultUa, after: cleanedUa });
+      }
+    } catch (err) {
+      mainLogger.warn('BrowserPool.userAgent.error', { sessionId, error: (err as Error).message });
+    }
+
+    // Anti-detection: hide `navigator.webdriver` on every frame load. Runs in
+    // the page's isolated world via executeJavaScript — does not touch the
+    // CDP session the agent uses, so driving behavior is unaffected.
+    const hideWebdriver = (): void => {
+      if (view.webContents.isDestroyed()) return;
+      view.webContents.executeJavaScript(
+        "try{Object.defineProperty(Navigator.prototype,'webdriver',{get:()=>undefined,configurable:true})}catch(e){}",
+        true,
+      ).catch(() => { /* frame may have navigated away */ });
+    };
+    view.webContents.on('dom-ready', hideWebdriver);
+
     view.webContents.setFrameRate(THROTTLED_FRAME_RATE);
 
     // Pin the embedded page's viewport to a fixed desktop size so sites

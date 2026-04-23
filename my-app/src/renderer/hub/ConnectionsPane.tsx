@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import anthropicLogo from './anthropic-logo.svg';
 import claudeCodeLogo from './claude-code-logo.svg';
+import openaiLogo from './openai-logo.svg';
+import codexLogo from './codex-logo.svg';
 
 type WaStatus = 'disconnected' | 'connecting' | 'qr_ready' | 'connected' | 'error';
 type AuthType = 'oauth' | 'apiKey' | 'none';
@@ -9,6 +11,16 @@ interface AuthStatus {
   masked?: string;
   subscriptionType?: string | null;
   expiresAt?: number;
+}
+interface OpenAiStatus {
+  present: boolean;
+  masked?: string;
+}
+interface CodexStatus {
+  installed: boolean;
+  authed: boolean;
+  version?: string;
+  error?: string;
 }
 
 interface ConnectionsPaneProps {
@@ -28,6 +40,15 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
   const [keyStatus, setKeyStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [keyError, setKeyError] = useState<string | null>(null);
 
+  const [openaiStatus, setOpenaiStatus] = useState<OpenAiStatus>({ present: false });
+  const [openaiEditing, setOpenaiEditing] = useState(false);
+  const [openaiDraft, setOpenaiDraft] = useState('');
+  const [openaiKeyStatus, setOpenaiKeyStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [openaiError, setOpenaiError] = useState<string | null>(null);
+
+  const [codexStatus, setCodexStatus] = useState<CodexStatus>({ installed: false, authed: false });
+  const [codexWaiting, setCodexWaiting] = useState(false);
+
   const refreshKey = useCallback(async () => {
     const api = window.electronAPI;
     if (!api?.settings?.apiKey) return;
@@ -35,6 +56,33 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
     setAuthStatus(status);
     const cc = await api.settings.claudeCode?.available();
     if (cc) setClaudeCodeAvailable(cc);
+  }, []);
+
+  const refreshOpenai = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.openaiKey) return;
+    try {
+      const s = await api.settings.openaiKey.getStatus();
+      setOpenaiStatus(s);
+    } catch (err) {
+      console.error('[connections] refreshOpenai failed', err);
+    }
+  }, []);
+
+  const refreshCodex = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.codex) return;
+    try {
+      const s = await api.settings.codex.status();
+      setCodexStatus({
+        installed: s.installed.installed,
+        authed: s.authed.authed,
+        version: s.installed.version,
+        error: s.installed.error ?? s.authed.error,
+      });
+    } catch (err) {
+      console.error('[connections] refreshCodex failed', err);
+    }
   }, []);
 
   const handleUseClaudeCode = useCallback(async () => {
@@ -50,7 +98,76 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
 
   useEffect(() => {
     refreshKey();
-  }, [refreshKey]);
+    refreshOpenai();
+    refreshCodex();
+  }, [refreshKey, refreshOpenai, refreshCodex]);
+
+  // Poll codex status while user completes `codex login` in Terminal.
+  useEffect(() => {
+    if (!codexWaiting) return;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX = 60;
+    const tick = async () => {
+      if (cancelled) return;
+      attempts++;
+      await refreshCodex();
+      if (codexStatus.authed || attempts >= MAX) { setCodexWaiting(false); return; }
+      setTimeout(tick, 3000);
+    };
+    const id = setTimeout(tick, 3000);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [codexWaiting, refreshCodex, codexStatus.authed]);
+
+  const handleSaveOpenai = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.openaiKey) return;
+    const trimmed = openaiDraft.trim();
+    if (!trimmed) return;
+    setOpenaiKeyStatus('testing');
+    setOpenaiError(null);
+    const test = await api.settings.openaiKey.test(trimmed);
+    if (!test.success) {
+      setOpenaiKeyStatus('error');
+      setOpenaiError(test.error ?? 'Key rejected by OpenAI');
+      return;
+    }
+    await api.settings.openaiKey.save(trimmed);
+    setOpenaiKeyStatus('ok');
+    setOpenaiDraft('');
+    setOpenaiEditing(false);
+    await refreshOpenai();
+  }, [openaiDraft, refreshOpenai]);
+
+  const handleDeleteOpenai = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.openaiKey) return;
+    await api.settings.openaiKey.delete();
+    setOpenaiKeyStatus('idle');
+    setOpenaiError(null);
+    await refreshOpenai();
+  }, [refreshOpenai]);
+
+  const handleCodexLogin = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.codex) return;
+    setCodexWaiting(true);
+    const res = await api.settings.codex.login();
+    if (!res.opened) {
+      console.warn('[connections] codex login failed', res.error);
+      setCodexWaiting(false);
+    }
+  }, []);
+
+  const handleCodexLogout = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.settings?.codex?.logout) return;
+    const res = await api.settings.codex.logout();
+    if (!res.opened) console.warn('[connections] codex logout failed', res.error);
+    // Poll for auth.json removal — user has to confirm in Terminal.
+    setCodexWaiting(true);
+    setTimeout(() => { void refreshCodex(); setCodexWaiting(false); }, 3000);
+  }, [refreshCodex]);
 
   const handleSaveKey = useCallback(async () => {
     const api = window.electronAPI;
@@ -75,11 +192,18 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
   const handleDeleteKey = useCallback(async () => {
     const api = window.electronAPI;
     if (!api?.settings?.apiKey) return;
-    await api.settings.apiKey.delete();
+    // If user signed in via Claude OAuth, also run `claude logout` in Terminal
+    // so the CLI's own keychain entry is cleared — otherwise the next run
+    // silently reuses the CLI's stored creds.
+    if (authStatus.type === 'oauth' && api.settings.claudeCode?.logout) {
+      await api.settings.claudeCode.logout();
+    } else {
+      await api.settings.apiKey.delete();
+    }
     setKeyStatus('idle');
     setKeyError(null);
     await refreshKey();
-  }, [refreshKey]);
+  }, [authStatus.type, refreshKey]);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -240,6 +364,101 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
         <div className="conn-card__header">
           <img
             className="conn-card__icon"
+            src={codexStatus.authed ? codexLogo : openaiLogo}
+            alt=""
+          />
+          <div className="conn-card__info">
+            <div className="conn-card__title-row">
+              <span className="conn-card__name">OpenAI</span>
+              <span className={`conn-card__dot ${codexStatus.authed || openaiStatus.present ? 'conn-card__dot--connected' : codexWaiting ? 'conn-card__dot--connecting' : 'conn-card__dot--disconnected'}`} />
+            </div>
+            <span className="conn-card__subtitle">
+              {openaiEditing
+                ? 'Enter a new key — it will be tested before saving'
+                : codexStatus.authed
+                ? `Signed in with Codex${codexStatus.version ? ` · v${codexStatus.version}` : ''}`
+                : codexWaiting
+                ? 'Waiting for `codex login` in Terminal…'
+                : openaiStatus.present && openaiStatus.masked
+                ? `API key · ${openaiStatus.masked}`
+                : 'Not connected'}
+            </span>
+          </div>
+          <div className="conn-card__actions">
+            {!openaiEditing && codexStatus.authed && (
+              <button className="conn-card__btn conn-card__btn--secondary" onClick={handleCodexLogout}>
+                Sign out
+              </button>
+            )}
+            {!openaiEditing && !openaiStatus.present && !codexStatus.authed && codexStatus.installed && (
+              <button
+                className="conn-card__btn conn-card__btn--primary"
+                onClick={handleCodexLogin}
+                disabled={codexWaiting}
+              >
+                {codexWaiting ? 'Waiting…' : 'Sign in with Codex'}
+              </button>
+            )}
+            {!openaiEditing && !openaiStatus.present && !codexStatus.authed && (
+              <button
+                className="conn-card__btn conn-card__btn--secondary"
+                onClick={() => { setOpenaiEditing(true); setOpenaiDraft(''); setOpenaiKeyStatus('idle'); setOpenaiError(null); }}
+              >
+                Add API key
+              </button>
+            )}
+            {!openaiEditing && openaiStatus.present && (
+              <button
+                className="conn-card__btn conn-card__btn--primary"
+                onClick={() => { setOpenaiEditing(true); setOpenaiDraft(''); setOpenaiKeyStatus('idle'); setOpenaiError(null); }}
+              >
+                Change
+              </button>
+            )}
+            {!openaiEditing && openaiStatus.present && (
+              <button className="conn-card__btn conn-card__btn--secondary" onClick={handleDeleteOpenai}>
+                Sign out
+              </button>
+            )}
+            {openaiEditing && (
+              <button
+                className="conn-card__btn conn-card__btn--secondary"
+                onClick={() => { setOpenaiEditing(false); setOpenaiDraft(''); setOpenaiError(null); setOpenaiKeyStatus('idle'); }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+        {openaiEditing && (
+          <div className="conn-card__api-key-edit">
+            <input
+              type="password"
+              className="conn-card__api-key-input"
+              placeholder="sk-..."
+              value={openaiDraft}
+              onChange={(e) => { setOpenaiDraft(e.target.value); setOpenaiKeyStatus('idle'); setOpenaiError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveOpenai(); }}
+              autoFocus
+            />
+            <button
+              className="conn-card__btn conn-card__btn--primary"
+              onClick={handleSaveOpenai}
+              disabled={!openaiDraft.trim() || openaiKeyStatus === 'testing'}
+            >
+              {openaiKeyStatus === 'testing' ? 'Testing...' : 'Save'}
+            </button>
+            {openaiKeyStatus === 'error' && openaiError && (
+              <span className="conn-card__api-key-error">{openaiError}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="conn-card">
+        <div className="conn-card__header">
+          <img
+            className="conn-card__icon"
             src="https://static.whatsapp.net/rsrc.php/v3/yP/r/rYZqPCBaG70.png"
             alt=""
           />
@@ -250,7 +469,9 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
             </div>
             <span className="conn-card__subtitle">
               {waStatus === 'connected' && waIdentity
-                ? `+${waIdentity.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4')}`
+                ? `Connected as +${waIdentity.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4')} — text yourself to start sessions and receive agent notifications in WhatsApp.`
+                : waStatus === 'disconnected'
+                ? 'Connect WhatsApp to auto-configure self-chat task starts and agent notifications.'
                 : statusText}
             </span>
           </div>
@@ -290,7 +511,7 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
               <div className="conn-card__qr-loading">Generating QR...</div>
             )}
             <p className="conn-card__qr-hint">
-              Open WhatsApp on your phone, go to Linked Devices, and scan this code
+              Open WhatsApp on your phone, go to Linked Devices, and scan this code. After linking, texting yourself will start sessions and notifications will come back to the same chat.
             </p>
           </div>
         )}

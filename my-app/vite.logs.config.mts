@@ -5,7 +5,6 @@ import path from 'node:path';
 // Logs renderer — a small always-on-top window pinned to the hub's bottom-right
 // that hosts an xterm instance for the focused session.
 export default defineConfig({
-  root: path.resolve(__dirname, 'src/renderer/logs'),
   cacheDir: path.resolve(__dirname, 'node_modules/.vite/logs'),
   plugins: [react()],
   resolve: {

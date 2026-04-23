@@ -122,7 +122,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
           creds: state.creds,
           keys: makeCacheableSignalKeyStore(state.keys, silentLogger as any),
         },
-        browser: Browsers.ubuntu('AgentHub'),
+        browser: Browsers.ubuntu('Browser Use Desktop'),
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
         msgRetryCounterCache: this.msgRetryCounterCache,

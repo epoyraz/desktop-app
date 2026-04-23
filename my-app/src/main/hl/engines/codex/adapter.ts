@@ -227,7 +227,14 @@ export const codexAdapter: EngineAdapter = {
         const text = typeof item.text === 'string' ? (item.text as string)
                    : typeof item.content === 'string' ? (item.content as string)
                    : '';
-        if (text.trim()) events.push({ type: 'thinking', text });
+        if (text.trim()) {
+          events.push({ type: 'thinking', text });
+          // Only track user-facing messages (agent_message) as the turn
+          // summary — internal reasoning is too verbose to surface.
+          if (itype === 'agent_message' || itype === 'assistant_message') {
+            ctx.lastNarrative = text;
+          }
+        }
         return { events };
       }
 
@@ -252,12 +259,17 @@ export const codexAdapter: EngineAdapter = {
       // Codex has no dedicated "done" tool the way Claude does — `turn.completed`
       // is the closest signal. Emit `done` here so SessionManager flips the
       // session to 'idle' (enabling follow-ups) instead of waiting for the
-      // 2-minute stuck timer to fire after process exit.
-      const usage = (e.usage as Record<string, unknown> | undefined) ?? {};
-      const outTok = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-      const summary = outTok > 0 ? `turn complete (${outTok} output tokens)` : 'turn complete';
+      // 2-minute stuck timer to fire after process exit. Use the latest
+      // agent_message text as the summary so the UI shows a real sentence,
+      // not token telemetry.
+      const summary = (ctx.lastNarrative ?? '').trim() || 'Task completed';
+      const outTok = typeof (e.usage as Record<string, unknown> | undefined)?.output_tokens === 'number'
+        ? ((e.usage as Record<string, unknown>).output_tokens as number) : 0;
       events.push({ type: 'done', summary, iterations: ctx.iter });
-      mainLogger.info('codex.turnCompleted.done', { outputTokens: outTok, iter: ctx.iter });
+      mainLogger.info('codex.turnCompleted.done', { outputTokens: outTok, iter: ctx.iter, summaryLen: summary.length });
+      // Reset for the next turn so a follow-up doesn't reuse the old text
+      // before the new turn has produced any narrative.
+      ctx.lastNarrative = undefined;
       return { events, terminalDone: true };
     }
 

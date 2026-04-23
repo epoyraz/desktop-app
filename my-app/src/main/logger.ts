@@ -1,10 +1,10 @@
 /**
- * Structured rotating logger for The Browser.
+ * Structured rotating logger for Browser Use Desktop.
  *
  * Outputs JSONL (one JSON object per line) to:
- *   ~/Library/Application Support/AgenticBrowser/logs/main.log
- *   ~/Library/Application Support/AgenticBrowser/logs/daemon.log
- *   ~/Library/Application Support/AgenticBrowser/logs/agent-task-{taskId}.log
+ *   ~/Library/Application Support/Browser Use/logs/main.log
+ *   ~/Library/Application Support/Browser Use/logs/daemon.log
+ *   ~/Library/Application Support/Browser Use/logs/agent-task-{taskId}.log
  *
  * Rotation: 10 MB per file, keep 5 rotated files.
  * Format: { ts, level, channel, msg, ...extra }
@@ -202,7 +202,7 @@ export class LoggerFactory {
           const { app } = require('electron');
           return app.getPath('userData');
         } catch {
-          return path.join(os.tmpdir(), 'AgenticBrowser');
+          return path.join(os.tmpdir(), 'Browser Use');
         }
       })();
 

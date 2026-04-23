@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agenticbrowser.local/schemas/tab_state.schema.json",
+  "$id": "https://browser-use.local/schemas/tab_state.schema.json",
   "title": "TabState",
   "description": "Tab state events emitted from Electron main to renderers via ipcMain/contextBridge",
   "version": "1.0",

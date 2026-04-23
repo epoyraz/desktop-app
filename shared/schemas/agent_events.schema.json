@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agenticbrowser.local/schemas/agent_events.schema.json",
+  "$id": "https://browser-use.local/schemas/agent_events.schema.json",
   "title": "AgentEvents",
   "description": "Push events emitted by Python daemon to Electron main over Unix socket (one JSON per newline)",
   "version": "1.0",

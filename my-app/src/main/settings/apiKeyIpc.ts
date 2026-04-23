@@ -6,15 +6,26 @@
  */
 
 import { ipcMain } from 'electron';
+import { spawn } from 'node:child_process';
 import { mainLogger } from '../logger';
 import { assertString } from '../ipc-validators';
-import { saveApiKey, saveOAuth, clearAuth, API_KEY_SERVICE, OAUTH_SERVICE } from '../identity/authStore';
+import {
+  saveApiKey,
+  saveOAuth,
+  clearAuth,
+  saveOpenAIKey,
+  deleteOpenAIKey,
+  API_KEY_SERVICE,
+  OAUTH_SERVICE,
+  OPENAI_KEY_SERVICE,
+} from '../identity/authStore';
 import { readClaudeCodeCredentials } from '../identity/claudeCodeAuth';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const TEST_MODEL = 'claude-haiku-4-5-20251001';
 const TEST_TIMEOUT_MS = 8000;
+const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
 const CH_GET_STATUS = 'settings:api-key:get-status';
 const CH_GET_MASKED = 'settings:api-key:get-masked';
@@ -23,6 +34,12 @@ const CH_TEST = 'settings:api-key:test';
 const CH_DELETE = 'settings:api-key:delete';
 const CH_CC_AVAILABLE = 'settings:claude-code:available';
 const CH_CC_USE = 'settings:claude-code:use';
+const CH_OAI_GET_STATUS = 'settings:openai-key:get-status';
+const CH_OAI_SAVE = 'settings:openai-key:save';
+const CH_OAI_TEST = 'settings:openai-key:test';
+const CH_OAI_DELETE = 'settings:openai-key:delete';
+const CH_CODEX_LOGOUT = 'settings:codex:logout';
+const CH_CC_LOGOUT = 'settings:claude-code:logout';
 
 const ACCOUNT = 'default';
 
@@ -157,6 +174,96 @@ async function handleUseClaudeCode(): Promise<{ subscriptionType: string | null 
   return { subscriptionType: creds.subscriptionType ?? null };
 }
 
+export interface OpenAiKeyStatus {
+  present: boolean;
+  masked?: string;
+}
+
+async function handleOpenAiGetStatus(): Promise<OpenAiKeyStatus> {
+  const keytar = loadKeytar();
+  if (!keytar) return { present: false };
+  try {
+    const raw = await keytar.getPassword(OPENAI_KEY_SERVICE, ACCOUNT);
+    if (raw) return { present: true, masked: maskKey(raw) };
+  } catch (err) {
+    mainLogger.warn('apiKeyIpc.openai.getStatus.error', { error: (err as Error).message });
+  }
+  return { present: false };
+}
+
+async function handleOpenAiSave(_e: Electron.IpcMainInvokeEvent, key: string): Promise<void> {
+  const validated = assertString(key, 'key', 500);
+  mainLogger.info('apiKeyIpc.openai.save', { keyLength: validated.length });
+  await saveOpenAIKey(validated);
+}
+
+async function handleOpenAiTest(
+  _e: Electron.IpcMainInvokeEvent,
+  key: string,
+): Promise<{ success: boolean; error?: string }> {
+  const validated = assertString(key, 'key', 500);
+  mainLogger.info('apiKeyIpc.openai.test', { keyLength: validated.length });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(OPENAI_MODELS_URL, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { 'authorization': `Bearer ${validated}` },
+    });
+    clearTimeout(timeoutId);
+    if (response.ok) return { success: true };
+    let errorMsg = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (body?.error?.message) errorMsg = body.error.message;
+    } catch { /* ignore */ }
+    mainLogger.warn('apiKeyIpc.openai.test.failed', { status: response.status, error: errorMsg });
+    return { success: false, error: errorMsg };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const msg = (err as Error).message ?? 'Network error';
+    mainLogger.warn('apiKeyIpc.openai.test.exception', { error: msg });
+    return { success: false, error: msg };
+  }
+}
+
+async function handleOpenAiDelete(): Promise<void> {
+  mainLogger.info('apiKeyIpc.openai.delete');
+  await deleteOpenAIKey();
+}
+
+function runInTerminal(command: string): Promise<{ opened: boolean; error?: string }> {
+  if (process.platform !== 'darwin') {
+    return Promise.resolve({ opened: false, error: `macOS only — run \`${command}\` manually` });
+  }
+  const script = `tell application "Terminal"\nactivate\ndo script "${command}"\nend tell`;
+  return new Promise((resolve) => {
+    const osa = spawn('osascript', ['-e', script]);
+    let stderrBuf = '';
+    osa.stderr.on('data', (d) => (stderrBuf += String(d)));
+    osa.on('close', (code) => {
+      if (code === 0) resolve({ opened: true });
+      else resolve({ opened: false, error: stderrBuf.trim() || `osascript exit ${code}` });
+    });
+  });
+}
+
+async function handleCodexLogout(): Promise<{ opened: boolean; error?: string }> {
+  mainLogger.info('apiKeyIpc.codex.logout');
+  return runInTerminal('codex logout');
+}
+
+async function handleClaudeCodeLogout(): Promise<{ opened: boolean; error?: string }> {
+  mainLogger.info('apiKeyIpc.claudeCode.logout');
+  // Clear our keychain mirror first so the UI updates immediately; the CLI's
+  // own keychain entry is cleared by `claude logout` in Terminal.
+  await clearAuth().catch((err) => {
+    mainLogger.warn('apiKeyIpc.claudeCode.logout.clearAuthFailed', { error: (err as Error).message });
+  });
+  return runInTerminal('claude auth logout');
+}
+
 export function registerApiKeyHandlers(): void {
   ipcMain.handle(CH_GET_STATUS, handleGetStatus);
   ipcMain.handle(CH_GET_MASKED, handleGetMasked);
@@ -165,6 +272,12 @@ export function registerApiKeyHandlers(): void {
   ipcMain.handle(CH_DELETE, handleDelete);
   ipcMain.handle(CH_CC_AVAILABLE, handleClaudeCodeAvailable);
   ipcMain.handle(CH_CC_USE, handleUseClaudeCode);
+  ipcMain.handle(CH_OAI_GET_STATUS, handleOpenAiGetStatus);
+  ipcMain.handle(CH_OAI_SAVE, handleOpenAiSave);
+  ipcMain.handle(CH_OAI_TEST, handleOpenAiTest);
+  ipcMain.handle(CH_OAI_DELETE, handleOpenAiDelete);
+  ipcMain.handle(CH_CODEX_LOGOUT, handleCodexLogout);
+  ipcMain.handle(CH_CC_LOGOUT, handleClaudeCodeLogout);
   mainLogger.info('apiKeyIpc.register.ok');
 }
 
@@ -176,4 +289,10 @@ export function unregisterApiKeyHandlers(): void {
   ipcMain.removeHandler(CH_DELETE);
   ipcMain.removeHandler(CH_CC_AVAILABLE);
   ipcMain.removeHandler(CH_CC_USE);
+  ipcMain.removeHandler(CH_OAI_GET_STATUS);
+  ipcMain.removeHandler(CH_OAI_SAVE);
+  ipcMain.removeHandler(CH_OAI_TEST);
+  ipcMain.removeHandler(CH_OAI_DELETE);
+  ipcMain.removeHandler(CH_CODEX_LOGOUT);
+  ipcMain.removeHandler(CH_CC_LOGOUT);
 }

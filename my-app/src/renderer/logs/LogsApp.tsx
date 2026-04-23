@@ -245,6 +245,18 @@ export function LogsApp(): React.ReactElement {
     });
   }, []);
 
+  // Auto-focus the follow-up textarea on active-session switch so the user
+  // can start typing immediately after clicking a card. Skip when the logs
+  // are collapsed (dot has no input) or the session is ended (textarea
+  // replaced with "Session ended" label). rAF lets the sessionStatus state
+  // update settle first.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (mode === 'dot') return;
+    if (sessionStatus === 'stopped') return;
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [sessionId, mode, sessionStatus]);
+
   useEffect(() => {
     const unsub = window.logsAPI.onModeChanged((m) => {
       console.log('[LogsApp] mode-changed', { mode: m });
@@ -326,9 +338,10 @@ export function LogsApp(): React.ReactElement {
       if (e.key === 'Escape') {
         e.preventDefault();
         if (mode === 'dot') return;
-        // Esc collapses to the dot rather than hiding entirely, so the
-        // user always has a one-click path back to the full panel.
-        window.logsAPI.setMode('dot');
+        // Step down one size per Esc press: full → normal → dot. Jumping
+        // full → dot in one keystroke skips the card view the user most
+        // often wants when exiting a deep-dive read.
+        window.logsAPI.setMode(mode === 'full' ? 'normal' : 'dot');
       }
     };
     document.addEventListener('keydown', onKey);

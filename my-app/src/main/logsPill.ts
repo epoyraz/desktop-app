@@ -186,8 +186,8 @@ export function createLogsWindow(): BrowserWindow {
   log.info('logs.preload.path', { preloadPath });
 
   const isDev = typeof LOGS_VITE_DEV_SERVER_URL !== 'undefined' && LOGS_VITE_DEV_SERVER_URL;
-  const devUrl = isDev ? `${LOGS_VITE_DEV_SERVER_URL}/logs.html` : null;
-  const htmlPath = isDev ? null : path.join(__dirname, '../renderer/logs/logs.html');
+  const devUrl = isDev ? `${LOGS_VITE_DEV_SERVER_URL}/src/renderer/logs/logs.html` : null;
+  const htmlPath = isDev ? null : path.join(__dirname, '../renderer/logs/src/renderer/logs/logs.html');
 
   const loadLogs = (): void => {
     if (!logsWindow || logsWindow.isDestroyed()) return;

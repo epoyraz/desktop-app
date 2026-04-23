@@ -6,10 +6,11 @@ import { assertString } from '../ipc-validators';
 import { createPillWindow, togglePill, onPillVisibilityChange } from '../pill';
 import { saveApiKey as authSaveApiKey, setAuthMode as authSetMode, saveOpenAIKey as authSaveOpenAIKey } from './authStore';
 import { getAdapter } from '../hl/engines';
+import { enrichedEnv } from '../hl/engines/pathEnrich';
 
 const GLOBAL_SHORTCUT = 'CommandOrControl+Shift+Space';
 
-const ANTHROPIC_SERVICE = 'com.agenticbrowser.anthropic';
+const ANTHROPIC_SERVICE = 'com.browser-use.desktop.anthropic';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const API_TEST_MODEL = 'claude-haiku-4-5-20251001';
@@ -51,8 +52,8 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
     const probe = await probeClaudeCli();
     mainLogger.info('onboardingHandlers.detectClaudeCode', { ...probe });
     // Back-compat shape: `available` = installed AND logged in. Extra fields
-    // expose the richer state so the renderer can show a "Run claude login"
-    // prompt when installed but not authed.
+    // expose the richer state so the renderer can show a direct login prompt
+    // when installed but not authed.
     return {
       available: probe.installed && probe.authed,
       installed: probe.installed,
@@ -65,8 +66,8 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
   });
 
   /**
-   * Open the user's Terminal with `claude login` pre-typed so they can
-   * complete the OAuth flow without leaving the app context.
+   * Open the user's Terminal with the Claude subscription login pre-typed.
+   * Kept as a fallback when the background browser flow isn't sufficient.
    */
   ipcMain.handle('onboarding:open-external', async (_event, url: string) => {
     const validated = assertString(url, 'url', 500);
@@ -76,12 +77,12 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
   });
 
   /**
-   * Run `claude login` as a background subprocess. The CLI opens the user's
-   * default browser for OAuth and waits for the callback itself — no TTY
-   * required in the common case. Resolves when the subprocess exits.
+   * Run Claude's subscription OAuth flow as a background subprocess. This
+   * skips the interactive auth-type chooser and lets the CLI open the browser
+   * directly without needing Terminal in the common case.
    */
   ipcMain.handle('onboarding:run-claude-login', async () => {
-    const child = spawn('claude', ['login'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('claude', ['auth', 'login', '--claudeai'], { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() });
     let stderrBuf = '';
     let stdoutBuf = '';
     child.stdout?.on('data', (d) => { stdoutBuf += String(d); if (stdoutBuf.length > 4096) stdoutBuf = stdoutBuf.slice(-4096); });
@@ -102,18 +103,18 @@ export function registerOnboardingHandlers(deps: OnboardingHandlerDeps): void {
         clearTimeout(timer);
         mainLogger.info('onboardingHandlers.runClaudeLogin.close', { code, stderr: stderrBuf.slice(-400) });
         if (code === 0) resolve({ ok: true, stdout: stdoutBuf });
-        else resolve({ ok: false, error: stderrBuf.trim() || stdoutBuf.trim() || `claude login exit ${code}` });
+        else resolve({ ok: false, error: stderrBuf.trim() || stdoutBuf.trim() || `claude auth login exit ${code}` });
       });
     });
   });
 
   ipcMain.handle('onboarding:open-claude-login-terminal', async () => {
-    const script = `tell application "Terminal"\nactivate\ndo script "claude login"\nend tell`;
+    const script = `tell application "Terminal"\nactivate\ndo script "claude auth login --claudeai"\nend tell`;
     return new Promise<{ opened: boolean; error?: string }>((resolve) => {
       if (process.platform !== 'darwin') {
         // Non-macOS fallback: just open the docs URL.
         shell.openExternal('https://code.claude.com/docs/en/authentication').catch(() => {});
-        resolve({ opened: false, error: 'macOS only — follow docs to run `claude login`' });
+        resolve({ opened: false, error: 'macOS only — follow docs to run `claude auth login --claudeai`' });
         return;
       }
       const osa = spawn('osascript', ['-e', script]);
@@ -431,7 +432,7 @@ function runCli(bin: string, args: string[], timeoutMs = 5000): Promise<{ ok: bo
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() });
     } catch (err) {
       resolve({ ok: false, stdout: '', stderr: '', error: (err as Error).message });
       return;

@@ -154,16 +154,17 @@ export function createPillWindow(): BrowserWindow {
     typeof PILL_VITE_DEV_SERVER_URL !== 'undefined' &&
     PILL_VITE_DEV_SERVER_URL
   ) {
-    const pillDevUrl = `${PILL_VITE_DEV_SERVER_URL}/pill.html`;
+    const pillDevUrl = `${PILL_VITE_DEV_SERVER_URL}/src/renderer/pill/pill.html`;
     log.debug('pill.createPillWindow', {
       message: 'Loading pill from dev server',
       url: pillDevUrl,
     });
     pillWindow.loadURL(pillDevUrl);
   } else {
-    // Forge VitePlugin outputs pill.html (matching the input filename).
-    // __dirname = .vite/build; renderer is at .vite/renderer/pill/pill.html
-    const htmlPath = path.join(__dirname, '../renderer/pill/pill.html');
+    // Forge VitePlugin preserves the input path relative to project root.
+    // __dirname = .vite/build; renderer lands at
+    // .vite/renderer/pill/src/renderer/pill/pill.html
+    const htmlPath = path.join(__dirname, '../renderer/pill/src/renderer/pill/pill.html');
     log.debug('pill.createPillWindow', {
       message: 'Loading pill from file',
       htmlPath,

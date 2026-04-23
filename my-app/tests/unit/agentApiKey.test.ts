@@ -171,7 +171,7 @@ describe('getApiKey()', () => {
 
   describe('API_KEY_KEYCHAIN_SERVICE constant', () => {
     it('is the expected service name', () => {
-      expect(API_KEY_KEYCHAIN_SERVICE).toBe('com.agenticbrowser.anthropic');
+      expect(API_KEY_KEYCHAIN_SERVICE).toBe('com.browser-use.desktop.anthropic');
     });
   });
 });

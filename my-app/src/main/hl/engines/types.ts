@@ -37,6 +37,10 @@ export interface ParseContext {
   harnessHelpersPath: string;
   harnessToolsPath: string;
   harnessSkillPath: string;
+  /** Last agent-facing narrative text seen this turn; adapters that don't
+   *  emit a proper summary (codex) use this as the `done.summary` so users
+   *  see a meaningful sentence instead of token telemetry. */
+  lastNarrative?: string;
 }
 
 /** Result of parsing one NDJSON line. */

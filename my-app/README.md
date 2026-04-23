@@ -1,4 +1,4 @@
-# Agent Hub
+# Browser Use Desktop
 
 Desktop app for running AI browser automation agents. Each agent gets its own sandboxed WebContentsView so multiple agents can work side-by-side without interfering with each other.
 
@@ -51,7 +51,7 @@ src/
     shell.ts               # Hub window preload
 
   renderer/                # React renderers
-    hub/                   # Agent Hub UI
+    hub/                   # Main UI
       HubApp.tsx           # Root layout, view switching, session management
       AgentPane.tsx        # Individual agent pane (output stream + browser view)
       CommandBar.tsx        # Task input overlay

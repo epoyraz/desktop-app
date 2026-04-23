@@ -1,4 +1,4 @@
-# Agent Hub — Design & UX Decisions
+# Browser Use Desktop — Design & UX Decisions
 
 ## What this is
 An Electron app (Chromium-based) that exists for one reason: **the user works on Chrome and browser automations, and agents running in the user's local Chrome would interfere with their work.** This app is an isolated Chromium instance where agents run browser tasks without colliding with the user's real Chrome session.
