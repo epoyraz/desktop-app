@@ -64,8 +64,12 @@ export function TerminalPane({ sessionId }: TerminalPaneProps): React.ReactEleme
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    console.log('[TerminalPane] mount', { sessionId, hasHost: !!hostRef.current });
     const host = hostRef.current;
-    if (!host) return;
+    if (!host) {
+      console.warn('[TerminalPane] no host element, aborting mount', { sessionId });
+      return;
+    }
 
     const term = new Terminal({
       fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
@@ -151,13 +155,16 @@ export function TerminalPane({ sessionId }: TerminalPaneProps): React.ReactEleme
 
     (async () => {
       try {
+        console.log('[TerminalPane] getTermReplay start', { sessionId, hasApi: !!api, hasSessions: !!api?.sessions });
         const replay = await api?.sessions?.getTermReplay?.(sessionId);
+        console.log('[TerminalPane] getTermReplay result', { sessionId, length: typeof replay === 'string' ? replay.length : 'non-string' });
         if (disposed) return;
         if (replay) term.write(replay);
       } catch (err) {
         console.error('[TerminalPane] getTermReplay failed', err);
       }
       replayApplied = true;
+      console.log('[TerminalPane] replay applied', { sessionId, pendingChunks: pending.length });
       if (pending.length > 0) {
         for (const chunk of pending) term.write(chunk);
         pending.length = 0;

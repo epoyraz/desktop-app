@@ -145,6 +145,12 @@ export function createShellWindow(opts?: ShellWindowOptions): BrowserWindow {
   win.webContents.on('preload-error', (_e, preloadPath, error) => {
     mainLogger.error('window.preload-error', { preloadPath, error: (error as Error).message });
   });
+  // Forward renderer console to main.log so we can diagnose silent-render
+  // failures without needing the user to open DevTools. Mirrors the logs
+  // window's existing `logs.console` forwarding.
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    mainLogger.info('hubRenderer.console', { level, message, line, sourceId });
+  });
 
   loadHub();
 
