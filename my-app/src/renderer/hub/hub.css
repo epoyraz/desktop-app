@@ -934,10 +934,18 @@
 
 .pane__browser-starting {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: var(--space-3);
   font-size: var(--font-size-xs);
   color: var(--color-fg-tertiary);
+  pointer-events: auto;
+}
+
+.pane__browser-starting-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .pane__output-starting {
@@ -3363,6 +3371,50 @@ button:focus:not(:focus-visible) {
   border-color: var(--color-accent-default);
 }
 
+.settings-pane__sublabel {
+  font-size: var(--font-size-2xs);
+  color: var(--color-fg-tertiary);
+  margin-top: 2px;
+}
+
+.settings-pane__toggle {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: 9px;
+  background: var(--color-bg-elevated);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+
+.settings-pane__toggle[data-on="true"] {
+  background: var(--color-accent-default);
+  border-color: var(--color-accent-default);
+}
+
+.settings-pane__toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-pane__toggle-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-fg-primary);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.settings-pane__toggle[data-on="true"] .settings-pane__toggle-thumb {
+  transform: translateX(14px);
+  background: #fff;
+}
+
 .settings-pane__recording {
   font-size: var(--font-size-xs);
   color: var(--color-accent-default);
@@ -4103,12 +4155,14 @@ button:focus:not(:focus-visible) {
 .sidebar__icon-btn.has-tooltip::after {
   bottom: auto;
   top: calc(100% + 6px);
-  transform: translateX(-50%) translateY(-2px);
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
 }
 
 .sidebar__icon-btn.has-tooltip:hover::after,
 .sidebar__icon-btn.has-tooltip:focus-visible::after {
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 .sidebar__group-icon {
@@ -4178,7 +4232,7 @@ button:focus:not(:focus-visible) {
 .sidebar__groups {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-2) 8px var(--space-4);
+  padding: var(--space-2) 0 var(--space-4);
   scrollbar-gutter: stable both-edges;
 }
 
@@ -4256,7 +4310,7 @@ button:focus:not(:focus-visible) {
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  padding: 4px;
+  padding: 4px 8px 4px 4px;
   background: transparent;
   border: 0;
   border-radius: var(--radius-md);
