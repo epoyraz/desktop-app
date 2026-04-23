@@ -73,20 +73,25 @@ const config: ForgeConfig = {
     ],
 
     // macOS bundle identity — only set when credentials are available.
-    ...(SHOULD_SIGN && {
-      osxSign: {
-        identity: SIGNING_IDENTITY,
-        // Newer @electron/osx-sign moved per-file options (hardenedRuntime,
-        // entitlements, etc.) behind an optionsForFile callback. Runtime
-        // behaviour is equivalent: every file gets hardened runtime and
-        // our entitlements.plist, which is what signing requires for
-        // Apple notarization.
-        optionsForFile: () => ({
-          hardenedRuntime: true,
-          entitlements: path.resolve(__dirname, 'entitlements.plist'),
-        }),
-      },
-    }),
+    // macOS 26+ refuses to launch any bundle without at least an ad-hoc
+    // signature ("is damaged" error). So we ALWAYS sign — with a real
+    // Developer ID when SHOULD_SIGN (for distribution + notarization) or
+    // ad-hoc (`identity: '-'`) for local/CI unsigned builds. Ad-hoc is
+    // free, requires no Apple account, and is enough to satisfy the macOS
+    // launcher's signature check.
+    osxSign: SHOULD_SIGN
+      ? {
+          identity: SIGNING_IDENTITY,
+          // Newer @electron/osx-sign moved per-file options (hardenedRuntime,
+          // entitlements, etc.) behind an optionsForFile callback.
+          optionsForFile: () => ({
+            hardenedRuntime: true,
+            entitlements: path.resolve(__dirname, 'entitlements.plist'),
+          }),
+        }
+      : {
+          identity: '-',
+        },
 
     // osxNotarize: submits to Apple notarization service after signing.
     // Requires @electron/notarize (listed in .track-F-deps.txt).
