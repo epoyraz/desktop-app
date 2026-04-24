@@ -292,8 +292,8 @@ app.whenReady().then(async () => {
         browser: v.browser ?? null,
         error: v.error ?? null,
         hint: v.browser && !v.browser.startsWith('Electron/')
-          ? `Port ${resolvedCdp.port} is owned by ${v.browser}, not our Electron. Restart the app to pick a fresh random port, or pass --remote-debugging-port=<free port>.`
-          : `Could not reach CDP on :${resolvedCdp.port}; Electron may not have bound it (another process may hold it).`,
+          ? `Port ${resolvedCdp.port} is owned by ${v.browser}, not our Electron. Close that process (or pass --remote-debugging-port=<free port>) and restart. The startup walk normally steps past bound ports, but the lsof/netstat probe missed this one.`
+          : `Could not reach CDP on :${resolvedCdp.port}; Electron may not have bound it (another process likely holds it).`,
       });
     }
   });

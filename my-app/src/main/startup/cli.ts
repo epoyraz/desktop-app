@@ -157,24 +157,57 @@ export function resolveCdpPort(argv: readonly string[]): ResolvedCdpPort {
 function isPortFreeSync(port: number): boolean {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
-  try {
-    if (process.platform === 'win32') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fsSync = require('node:fs') as typeof import('node:fs');
+
+  // Windows first — netstat lives in System32 which is always on PATH when
+  // Electron launches, so the default spawn works.
+  if (process.platform === 'win32') {
+    try {
       const res = spawnSync('netstat', ['-an'], { encoding: 'utf8', timeout: 2000 });
       if (res.status !== 0 || !res.stdout) return true;
       const needle = `:${port} `;
       return !res.stdout
         .split(/\r?\n/)
         .some((line) => line.includes(needle) && /LISTENING/i.test(line));
+    } catch {
+      return true;
     }
-    const res = spawnSync('lsof', ['-i', `:${port}`, '-sTCP:LISTEN', '-n', '-P'], {
+  }
+
+  // POSIX — Electron's inherited PATH is often minimal (missing /usr/sbin
+  // when launched from Finder or dev harness), so hunt down an absolute
+  // `lsof` path first. Probe in priority order; first that exists wins.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const LSOF_CANDIDATES = ['/usr/sbin/lsof', '/usr/bin/lsof', 'lsof'] as const;
+  let bin: string | null = null;
+  for (const candidate of LSOF_CANDIDATES) {
+    if (candidate.startsWith('/')) {
+      try {
+        if (fsSync.existsSync(candidate)) { bin = candidate; break; }
+      } catch { /* try next */ }
+    } else {
+      // Plain-name fallback: let spawnSync resolve via PATH.
+      bin = candidate;
+      break;
+    }
+  }
+  if (!bin) return true;
+
+  try {
+    const res = spawnSync(bin, ['-i', `:${port}`, '-sTCP:LISTEN', '-n', '-P'], {
       encoding: 'utf8',
       timeout: 2000,
     });
-    // lsof exits 1 when there are no matches — treat as "free".
-    if (res.status !== 0) return true;
+    // spawnSync with ENOENT leaves status = null — treat that as "unknown"
+    // and be pessimistic: claim "taken" so the walk steps forward rather
+    // than handing Electron a port that silently fails to bind. This is the
+    // exact failure mode that put Chrome/146 on :9222 under portSource='walk'.
+    if (res.error || res.status === null) return false;
+    // Exit code 1 with empty stdout means no matches = port is free.
     return (res.stdout ?? '').trim().length === 0;
   } catch {
-    return true;
+    return false;
   }
 }
 
