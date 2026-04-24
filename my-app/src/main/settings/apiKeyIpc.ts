@@ -20,6 +20,7 @@ import {
   OPENAI_KEY_SERVICE,
 } from '../identity/authStore';
 import { readClaudeCodeCredentials } from '../identity/claudeCodeAuth';
+import { enrichedEnv } from '../hl/engines/pathEnrich';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -233,35 +234,56 @@ async function handleOpenAiDelete(): Promise<void> {
   await deleteOpenAIKey();
 }
 
-function runInTerminal(command: string): Promise<{ opened: boolean; error?: string }> {
-  if (process.platform !== 'darwin') {
-    return Promise.resolve({ opened: false, error: `macOS only — run \`${command}\` manually` });
-  }
-  const script = `tell application "Terminal"\nactivate\ndo script "${command}"\nend tell`;
+/**
+ * Run a logout CLI non-interactively. Logout is never a TTY flow — it just
+ * deletes credentials and exits — so plain child_process.spawn works on
+ * macOS, Windows, and Linux with no platform branching.
+ */
+function runLogoutCommand(bin: string, args: string[]): Promise<{ opened: boolean; error?: string }> {
   return new Promise((resolve) => {
-    const osa = spawn('osascript', ['-e', script]);
+    let child;
+    try {
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: enrichedEnv() });
+    } catch (err) {
+      resolve({ opened: false, error: `spawn failed: ${(err as Error).message}` });
+      return;
+    }
     let stderrBuf = '';
-    osa.stderr.on('data', (d) => (stderrBuf += String(d)));
-    osa.on('close', (code) => {
-      if (code === 0) resolve({ opened: true });
-      else resolve({ opened: false, error: stderrBuf.trim() || `osascript exit ${code}` });
+    let stdoutBuf = '';
+    child.stdout.on('data', (d) => { stdoutBuf += String(d); if (stdoutBuf.length > 2048) stdoutBuf = stdoutBuf.slice(-2048); });
+    child.stderr.on('data', (d) => { stderrBuf += String(d); if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-2048); });
+    const killer = setTimeout(() => { try { child.kill('SIGTERM'); } catch { /* already dead */ } }, 15_000);
+    child.on('error', (err) => {
+      clearTimeout(killer);
+      resolve({ opened: false, error: err.message });
+    });
+    child.on('close', (code) => {
+      clearTimeout(killer);
+      if (code === 0) {
+        mainLogger.info('apiKeyIpc.logout.ok', { bin, args });
+        resolve({ opened: true });
+      } else {
+        const detail = stderrBuf.trim() || stdoutBuf.trim() || `${bin} exited ${code}`;
+        mainLogger.warn('apiKeyIpc.logout.failed', { bin, args, code, detail: detail.slice(-400) });
+        resolve({ opened: false, error: detail.slice(-400) });
+      }
     });
   });
 }
 
 async function handleCodexLogout(): Promise<{ opened: boolean; error?: string }> {
   mainLogger.info('apiKeyIpc.codex.logout');
-  return runInTerminal('codex logout');
+  return runLogoutCommand('codex', ['logout']);
 }
 
 async function handleClaudeCodeLogout(): Promise<{ opened: boolean; error?: string }> {
   mainLogger.info('apiKeyIpc.claudeCode.logout');
-  // Clear our keychain mirror first so the UI updates immediately; the CLI's
-  // own keychain entry is cleared by `claude logout` in Terminal.
+  // Clear our keychain mirror first so the UI updates immediately; then
+  // invoke the CLI so its own credential store (OS keychain) is wiped too.
   await clearAuth().catch((err) => {
     mainLogger.warn('apiKeyIpc.claudeCode.logout.clearAuthFailed', { error: (err as Error).message });
   });
-  return runInTerminal('claude auth logout');
+  return runLogoutCommand('claude', ['auth', 'logout']);
 }
 
 export function registerApiKeyHandlers(): void {
