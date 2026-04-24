@@ -284,15 +284,16 @@ app.whenReady().then(async () => {
   // mismatch so users hit a clear error instead of mysterious CDP failures.
   verifyCdpOwnership(resolvedCdp.port).then((v) => {
     if (v.ok) {
-      mainLogger.info('main.cdp.verified', { port: resolvedCdp.port, browser: v.browser });
+      mainLogger.info('main.cdp.verified', { port: resolvedCdp.port, browser: v.browser, userAgent: v.userAgent });
     } else {
       mainLogger.error('main.cdp.verifyFailed', {
         port: resolvedCdp.port,
         portSource: resolvedCdp.source,
         browser: v.browser ?? null,
+        userAgent: v.userAgent ?? null,
         error: v.error ?? null,
-        hint: v.browser && !v.browser.startsWith('Electron/')
-          ? `Port ${resolvedCdp.port} is owned by ${v.browser}, not our Electron. Close that process (or pass --remote-debugging-port=<free port>) and restart. The startup walk normally steps past bound ports, but the lsof/netstat probe missed this one.`
+        hint: v.userAgent
+          ? `CDP on :${resolvedCdp.port} responded but User-Agent does not contain Electron/ or BrowserUse/ — another Chromium-based process likely owns this port. Close it (or pass --remote-debugging-port=<free port>) and restart.`
           : `Could not reach CDP on :${resolvedCdp.port}; Electron may not have bound it (another process likely holds it).`,
       });
     }

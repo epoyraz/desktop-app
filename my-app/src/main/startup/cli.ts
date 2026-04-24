@@ -154,59 +154,39 @@ export function resolveCdpPort(argv: readonly string[]): ResolvedCdpPort {
  * failure keeps startup moving; verifyCdpOwnership() post-boot catches a
  * real collision and logs loudly.
  */
+/**
+ * Try to bind `net.createServer().listen(port)` in a short-lived subprocess.
+ * Authoritative: Node resolves EADDRINUSE iff something already holds the
+ * port, and succeeds iff we can take it ourselves. No dependency on lsof /
+ * netstat / their PATH availability.
+ *
+ * Cost: one spawnSync of Electron-as-Node per probe (~100-200ms). Cheap
+ * for the one or two probes we do at startup. Blocking is required because
+ * we must have the answer before app.commandLine.appendSwitch fires.
+ */
 function isPortFreeSync(port: number): boolean {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fsSync = require('node:fs') as typeof import('node:fs');
-
-  // Windows first — netstat lives in System32 which is always on PATH when
-  // Electron launches, so the default spawn works.
-  if (process.platform === 'win32') {
-    try {
-      const res = spawnSync('netstat', ['-an'], { encoding: 'utf8', timeout: 2000 });
-      if (res.status !== 0 || !res.stdout) return true;
-      const needle = `:${port} `;
-      return !res.stdout
-        .split(/\r?\n/)
-        .some((line) => line.includes(needle) && /LISTENING/i.test(line));
-    } catch {
-      return true;
-    }
-  }
-
-  // POSIX — Electron's inherited PATH is often minimal (missing /usr/sbin
-  // when launched from Finder or dev harness), so hunt down an absolute
-  // `lsof` path first. Probe in priority order; first that exists wins.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const LSOF_CANDIDATES = ['/usr/sbin/lsof', '/usr/bin/lsof', 'lsof'] as const;
-  let bin: string | null = null;
-  for (const candidate of LSOF_CANDIDATES) {
-    if (candidate.startsWith('/')) {
-      try {
-        if (fsSync.existsSync(candidate)) { bin = candidate; break; }
-      } catch { /* try next */ }
-    } else {
-      // Plain-name fallback: let spawnSync resolve via PATH.
-      bin = candidate;
-      break;
-    }
-  }
-  if (!bin) return true;
-
+  const script = `
+    const net = require('node:net');
+    const s = net.createServer();
+    s.once('error', (e) => { process.exit(e && e.code === 'EADDRINUSE' ? 1 : 2); });
+    s.once('listening', () => { s.close(() => process.exit(0)); });
+    s.listen(${port}, '127.0.0.1');
+    setTimeout(() => { try { s.close(); } catch {} process.exit(3); }, 800);
+  `;
   try {
-    const res = spawnSync(bin, ['-i', `:${port}`, '-sTCP:LISTEN', '-n', '-P'], {
+    const res = spawnSync(process.execPath, ['-e', script], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      timeout: 3000,
       encoding: 'utf8',
-      timeout: 2000,
     });
-    // spawnSync with ENOENT leaves status = null — treat that as "unknown"
-    // and be pessimistic: claim "taken" so the walk steps forward rather
-    // than handing Electron a port that silently fails to bind. This is the
-    // exact failure mode that put Chrome/146 on :9222 under portSource='walk'.
-    if (res.error || res.status === null) return false;
-    // Exit code 1 with empty stdout means no matches = port is free.
-    return (res.stdout ?? '').trim().length === 0;
+    // 0 → port was free and we bound-then-released. Anything else (1 =
+    // EADDRINUSE, 2 = other error, 3 = timeout) → treat as taken so the
+    // walk advances rather than hand Electron a port it can't take.
+    return res.status === 0;
   } catch {
+    // Spawn failed — be pessimistic and advance the walk.
     return false;
   }
 }
@@ -252,7 +232,7 @@ export function getAnnouncedCdpPort(): number {
  * Returns { ok: true } when Browser starts with 'Electron/', { ok: false }
  * otherwise. Caller is responsible for logging + surfacing errors.
  */
-export async function verifyCdpOwnership(port: number, timeoutMs = 2000): Promise<{ ok: boolean; browser?: string; error?: string }> {
+export async function verifyCdpOwnership(port: number, timeoutMs = 2000): Promise<{ ok: boolean; browser?: string; userAgent?: string; error?: string }> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const http = require('node:http') as typeof import('node:http');
   return new Promise((resolve) => {
@@ -264,10 +244,16 @@ export async function verifyCdpOwnership(port: number, timeoutMs = 2000): Promis
         res.on('data', (c) => (buf += c));
         res.on('end', () => {
           try {
-            const parsed = JSON.parse(buf) as { Browser?: string };
+            const parsed = JSON.parse(buf) as { Browser?: string; 'User-Agent'?: string };
             const browser = parsed.Browser ?? 'unknown';
-            const ok = browser.startsWith('Electron/');
-            resolve({ ok, browser });
+            const userAgent = parsed['User-Agent'] ?? '';
+            // Electron reports its underlying Chromium version in the Browser
+            // field (e.g. "Chrome/146.0.7680.188") — the Electron identity is
+            // only visible in User-Agent (".../Electron/41.2.1 ..."). Also
+            // accept our productName so a renamed/rebranded build is
+            // recognised when Electron/ slips.
+            const ok = /\bElectron\//.test(userAgent) || /\bBrowserUse\//.test(userAgent);
+            resolve({ ok, browser, userAgent });
           } catch (err) {
             resolve({ ok: false, error: `parse failed: ${(err as Error).message}` });
           }
