@@ -15,9 +15,7 @@ import {
   clearAuth,
   saveOpenAIKey,
   deleteOpenAIKey,
-  API_KEY_SERVICE,
-  OAUTH_SERVICE,
-  OPENAI_KEY_SERVICE,
+  getCredentialStatus,
 } from '../identity/authStore';
 import { readClaudeCodeCredentials } from '../identity/claudeCodeAuth';
 import { enrichedEnv } from '../hl/engines/pathEnrich';
@@ -42,26 +40,6 @@ const CH_OAI_DELETE = 'settings:openai-key:delete';
 const CH_CODEX_LOGOUT = 'settings:codex:logout';
 const CH_CC_LOGOUT = 'settings:claude-code:logout';
 
-const ACCOUNT = 'default';
-
-interface KeytarLike {
-  getPassword(service: string, account: string): Promise<string | null>;
-}
-
-function loadKeytar(): KeytarLike | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('keytar') as KeytarLike;
-  } catch {
-    return null;
-  }
-}
-
-function maskKey(key: string): string {
-  if (key.length <= 8) return '****';
-  return `${key.slice(0, 7)}...${key.slice(-4)}`;
-}
-
 export interface AuthStatus {
   type: 'oauth' | 'apiKey' | 'none';
   masked?: string;
@@ -70,31 +48,18 @@ export interface AuthStatus {
 }
 
 async function handleGetStatus(): Promise<AuthStatus> {
-  const keytar = loadKeytar();
-  if (!keytar) return { type: 'none' };
-
-  try {
-    const oauthRaw = await keytar.getPassword(OAUTH_SERVICE, ACCOUNT);
-    if (oauthRaw) {
-      const parsed = JSON.parse(oauthRaw) as { subscriptionType?: string; expiresAt?: number; accessToken?: string };
-      return {
-        type: 'oauth',
-        subscriptionType: parsed.subscriptionType ?? null,
-        expiresAt: parsed.expiresAt,
-        masked: parsed.accessToken ? maskKey(parsed.accessToken) : undefined,
-      };
-    }
-  } catch (err) {
-    mainLogger.warn('apiKeyIpc.getStatus.oauthError', { error: (err as Error).message });
+  const { anthropic } = await getCredentialStatus();
+  if (anthropic.type === 'oauth') {
+    return {
+      type: 'oauth',
+      subscriptionType: anthropic.subscriptionType,
+      expiresAt: anthropic.expiresAt,
+      masked: anthropic.masked,
+    };
   }
-
-  try {
-    const raw = await keytar.getPassword(API_KEY_SERVICE, ACCOUNT);
-    if (raw) return { type: 'apiKey', masked: maskKey(raw) };
-  } catch (err) {
-    mainLogger.warn('apiKeyIpc.getStatus.apiKeyError', { error: (err as Error).message });
+  if (anthropic.type === 'apiKey') {
+    return { type: 'apiKey', masked: anthropic.masked };
   }
-
   return { type: 'none' };
 }
 
@@ -181,14 +146,8 @@ export interface OpenAiKeyStatus {
 }
 
 async function handleOpenAiGetStatus(): Promise<OpenAiKeyStatus> {
-  const keytar = loadKeytar();
-  if (!keytar) return { present: false };
-  try {
-    const raw = await keytar.getPassword(OPENAI_KEY_SERVICE, ACCOUNT);
-    if (raw) return { present: true, masked: maskKey(raw) };
-  } catch (err) {
-    mainLogger.warn('apiKeyIpc.openai.getStatus.error', { error: (err as Error).message });
-  }
+  const { openai } = await getCredentialStatus();
+  if (openai.present) return { present: true, masked: openai.masked };
   return { present: false };
 }
 
