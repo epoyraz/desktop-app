@@ -140,6 +140,7 @@ async function handleUseClaudeCode(): Promise<{ subscriptionType: string | null 
   }
   // Just record the user's mode preference so resolveAuth() doesn't return
   // a stored API key when they've explicitly chosen the subscription path.
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- not a React hook; main-process function that happens to start with `use`
   await useClaudeCodeSubscription();
   return { subscriptionType: creds.subscriptionType ?? null };
 }
