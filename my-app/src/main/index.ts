@@ -1042,11 +1042,17 @@ app.whenReady().then(async () => {
     mainLogger.info('main.sessions:view-attach', { id: validatedId, visualBounds: bounds });
     const ok = browserPool.attachToWindow(validatedId, shellWindow, bounds);
     if (ok) {
-      // Give focus so clicks work immediately after attach (previously handled
-      // by startSessionWithAgent / rerun, which no longer attach).
-      const attachedView = browserPool.getView(validatedId);
-      if (attachedView && !attachedView.webContents.isDestroyed()) {
-        attachedView.webContents.focus();
+      // Only focus the BrowserView when the shell window is already the
+      // user's foreground window. Otherwise — e.g. user submitted a task
+      // via the global-shortcut pill while focused on Cursor — focusing
+      // here yanks the OS focus back to Browser Use, which is awful UX.
+      // When the user later switches to the shell themselves, native macOS
+      // click-to-focus on the BrowserView area takes over.
+      if (shellWindow.isFocused()) {
+        const attachedView = browserPool.getView(validatedId);
+        if (attachedView && !attachedView.webContents.isDestroyed()) {
+          attachedView.webContents.focus();
+        }
       }
       // addChildView raises the browser view above any sibling we already
       // have. Re-raise the takeover overlay so it stays on top.
