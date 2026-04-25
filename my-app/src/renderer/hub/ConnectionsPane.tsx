@@ -48,6 +48,11 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
 
   const [codexStatus, setCodexStatus] = useState<CodexStatus>({ installed: false, authed: false });
   const [codexWaiting, setCodexWaiting] = useState(false);
+  // Surfaced from the codex login PTY when --device-auth is in play. Drives
+  // the small "one-time code" block below the Codex card so users on
+  // restricted networks (no localhost-callback) can still sign in.
+  const [codexDeviceCode, setCodexDeviceCode] = useState<string | null>(null);
+  const [codexVerificationUrl, setCodexVerificationUrl] = useState<string | null>(null);
 
   const refreshKey = useCallback(async () => {
     const api = window.electronAPI;
@@ -102,21 +107,42 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
     refreshCodex();
   }, [refreshKey, refreshOpenai, refreshCodex]);
 
-  // Poll codex status while user completes `codex login` in Terminal.
+  // Periodic refresh while the pane is mounted — catches external state
+  // changes (user runs `claude auth logout` in a terminal, codex token
+  // expires server-side, etc.) so the panel never goes more than ~5s out
+  // of sync with reality.
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshKey();
+      refreshOpenai();
+      refreshCodex();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [refreshKey, refreshOpenai, refreshCodex]);
+
+  // Poll codex status while user completes the codex OAuth flow. Tighter
+  // interval than the 5s panel refresh so the UI flips to "Signed in" the
+  // second `~/.codex/auth.json` appears.
   useEffect(() => {
     if (!codexWaiting) return;
     let cancelled = false;
     let attempts = 0;
-    const MAX = 60;
+    const MAX = 180;
     const tick = async () => {
       if (cancelled) return;
       attempts++;
       await refreshCodex();
-      if (codexStatus.authed || attempts >= MAX) { setCodexWaiting(false); return; }
-      setTimeout(tick, 3000);
+      if (codexStatus.authed) {
+        setCodexWaiting(false);
+        setCodexDeviceCode(null);
+        setCodexVerificationUrl(null);
+        return;
+      }
+      if (attempts >= MAX) { setCodexWaiting(false); return; }
+      setTimeout(tick, 1000);
     };
-    const id = setTimeout(tick, 3000);
-    return () => { cancelled = true; clearTimeout(id); };
+    void tick();
+    return () => { cancelled = true; };
   }, [codexWaiting, refreshCodex, codexStatus.authed]);
 
   const handleSaveOpenai = useCallback(async () => {
@@ -148,25 +174,38 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
     await refreshOpenai();
   }, [refreshOpenai]);
 
-  const handleCodexLogin = useCallback(async () => {
+  const handleCodexLogin = useCallback(async (opts?: { deviceAuth?: boolean }) => {
     const api = window.electronAPI;
     if (!api?.settings?.codex) return;
     setCodexWaiting(true);
-    const res = await api.settings.codex.login();
+    setCodexDeviceCode(null);
+    setCodexVerificationUrl(null);
+    const res = await api.settings.codex.login(opts);
     if (!res.opened) {
       console.warn('[connections] codex login failed', res.error);
       setCodexWaiting(false);
+      return;
     }
+    if (res.deviceCode) setCodexDeviceCode(res.deviceCode);
+    if (res.verificationUrl) setCodexVerificationUrl(res.verificationUrl);
   }, []);
+  // Stable callbacks for the Codex login buttons. Plain OAuth is the default;
+  // device-auth is the "Having trouble?" fallback for users on networks/setups
+  // where the localhost callback can't reach the browser.
+  const handleCodexLoginPlain = useCallback(() => handleCodexLogin(), [handleCodexLogin]);
+  const handleCodexLoginDeviceAuth = useCallback(() => handleCodexLogin({ deviceAuth: true }), [handleCodexLogin]);
 
   const handleCodexLogout = useCallback(async () => {
     const api = window.electronAPI;
     if (!api?.settings?.codex?.logout) return;
+    // codex logout is now a non-interactive subprocess (codex logout writes
+    // to ~/.codex/auth.json then exits); no Terminal involvement. Refresh
+    // immediately, no polling needed.
     const res = await api.settings.codex.logout();
     if (!res.opened) console.warn('[connections] codex logout failed', res.error);
-    // Poll for auth.json removal — user has to confirm in Terminal.
-    setCodexWaiting(true);
-    setTimeout(() => { void refreshCodex(); setCodexWaiting(false); }, 3000);
+    setCodexDeviceCode(null);
+    setCodexVerificationUrl(null);
+    await refreshCodex();
   }, [refreshCodex]);
 
   const handleSaveKey = useCallback(async () => {
@@ -377,8 +416,10 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
                 ? 'Enter a new key — it will be tested before saving'
                 : codexStatus.authed
                 ? `Signed in with Codex${codexStatus.version ? ` · v${codexStatus.version}` : ''}`
+                : codexWaiting && codexDeviceCode
+                ? 'Enter the code shown below on the verification page.'
                 : codexWaiting
-                ? 'Waiting for `codex login` in Terminal…'
+                ? 'Finish the OAuth flow in your browser…'
                 : openaiStatus.present && openaiStatus.masked
                 ? `API key · ${openaiStatus.masked}`
                 : 'Not connected'}
@@ -393,10 +434,9 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
             {!openaiEditing && !openaiStatus.present && !codexStatus.authed && codexStatus.installed && (
               <button
                 className="conn-card__btn conn-card__btn--primary"
-                onClick={handleCodexLogin}
-                disabled={codexWaiting}
+                onClick={handleCodexLoginPlain}
               >
-                {codexWaiting ? 'Waiting…' : 'Sign in with Codex'}
+                {codexWaiting ? 'Restart' : 'Sign in with Codex'}
               </button>
             )}
             {!openaiEditing && !openaiStatus.present && !codexStatus.authed && (
@@ -430,6 +470,32 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
             )}
           </div>
         </div>
+        {codexDeviceCode && (
+          <div className="codex-device-auth">
+            <div className="codex-device-auth__label">One-time code</div>
+            <div className="codex-device-auth__code">{codexDeviceCode}</div>
+            {codexVerificationUrl && (
+              <div className="codex-device-auth__hint">
+                Verification page should have opened automatically.{' '}
+                If not, navigate to{' '}
+                <span className="codex-device-auth__url">{codexVerificationUrl}</span>{' '}
+                and enter the code above.
+              </div>
+            )}
+          </div>
+        )}
+        {/* Remote/headless fallback. Mirrors the onboarding affordance —
+            ChatGPT accounts need 'Enable device code authorization' in
+            Security Settings for this path to work server-side. */}
+        {!openaiEditing && !openaiStatus.present && !codexStatus.authed && codexStatus.installed && !codexDeviceCode && (
+          <button
+            type="button"
+            className="codex-device-auth__link codex-device-auth__link--secondary codex-device-auth__fallback"
+            onClick={handleCodexLoginDeviceAuth}
+          >
+            Having trouble? Use device code flow instead
+          </button>
+        )}
         {openaiEditing && (
           <div className="conn-card__api-key-edit">
             <input

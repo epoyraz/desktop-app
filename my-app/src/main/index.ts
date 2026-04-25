@@ -977,12 +977,12 @@ app.whenReady().then(async () => {
     return { id: adapter.id, displayName: adapter.displayName, installed, authed };
   });
 
-  ipcMain.handle('sessions:engine-login', async (_event, engineId: string) => {
+  ipcMain.handle('sessions:engine-login', async (_event, engineId: string, opts?: { deviceAuth?: boolean }) => {
     const validated = assertString(engineId, 'engineId', 50);
     const { getAdapter } = await import('./hl/engines');
     const adapter = getAdapter(validated);
     if (!adapter) throw new Error(`unknown engine: ${validated}`);
-    return adapter.openLoginInTerminal();
+    return adapter.openLoginInTerminal(opts);
   });
 
   ipcMain.handle('sessions:reveal-output', async (_event, filePath: string) => {

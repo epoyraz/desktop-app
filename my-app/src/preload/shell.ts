@@ -83,8 +83,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         installed: { installed: boolean; version?: string; error?: string };
         authed: { authed: boolean; error?: string };
       }> => ipcRenderer.invoke('sessions:engine-status', 'codex'),
-      login: (): Promise<{ opened: boolean; error?: string }> =>
-        ipcRenderer.invoke('sessions:engine-login', 'codex'),
+      login: (opts?: { deviceAuth?: boolean }): Promise<{ opened: boolean; error?: string; verificationUrl?: string; deviceCode?: string }> =>
+        ipcRenderer.invoke('sessions:engine-login', 'codex', opts),
       logout: (): Promise<{ opened: boolean; error?: string }> =>
         ipcRenderer.invoke('settings:codex:logout'),
     },

@@ -218,10 +218,13 @@ export async function useClaudeCodeSubscription(): Promise<void> {
 
 /** Forget the saved Anthropic API key. Claude CLI subscription is unaffected
  *  — that lives in the CLI's own keychain. To log out of the subscription,
- *  callers should run `claude auth logout` (apiKeyIpc.ts handles that). */
+ *  callers should run `claude auth logout` (apiKeyIpc.ts handles that). Also
+ *  clears the authMode flag so a subsequent `claude auth login` is honoured
+ *  without the user having to also explicitly pick the subscription path. */
 export async function clearAuth(): Promise<void> {
   const c = await getAll();
   c.anthropicApiKey = null;
+  c.authMode = null;
   await persistCache();
   mainLogger.info('authStore.clearAuth');
 }

@@ -172,7 +172,7 @@ interface ElectronSettingsCodexAPI {
     installed: { installed: boolean; version?: string; error?: string };
     authed: { authed: boolean; error?: string };
   }>;
-  login: () => Promise<{ opened: boolean; error?: string }>;
+  login: (opts?: { deviceAuth?: boolean }) => Promise<{ opened: boolean; error?: string; verificationUrl?: string; deviceCode?: string }>;
   logout: () => Promise<{ opened: boolean; error?: string }>;
 }
 
