@@ -1006,16 +1006,33 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('sessions:open-in-editor', async (_event, payload: { editorId: string; filePath: string }) => {
-    const editorId = assertString(payload?.editorId, 'editorId', 50);
-    const filePath = assertString(payload?.filePath, 'filePath', 2000);
-    const resolvedPath = path.resolve(filePath);
-    const outputsRoot = path.resolve(harnessDir(), 'outputs');
-    if (!resolvedPath.startsWith(outputsRoot + path.sep)) {
-      throw new Error('refused: path outside outputs dir');
+    mainLogger.info('main.sessions:open-in-editor.enter', {
+      editorId: payload?.editorId,
+      filePath: payload?.filePath,
+      payloadType: typeof payload,
+    });
+    try {
+      const editorId = assertString(payload?.editorId, 'editorId', 50);
+      const filePath = assertString(payload?.filePath, 'filePath', 2000);
+      const resolvedPath = path.resolve(filePath);
+      const outputsRoot = path.resolve(harnessDir(), 'outputs');
+      if (!resolvedPath.startsWith(outputsRoot + path.sep)) {
+        mainLogger.warn('main.sessions:open-in-editor.outsideOutputs', {
+          resolvedPath, outputsRoot,
+        });
+        throw new Error(`refused: path "${resolvedPath}" is outside outputs dir "${outputsRoot}"`);
+      }
+      const { openInEditor } = await import('./editors');
+      await openInEditor(editorId, resolvedPath);
+      mainLogger.info('main.sessions:open-in-editor.ok', { editorId, resolvedPath });
+      return { opened: true };
+    } catch (err) {
+      mainLogger.error('main.sessions:open-in-editor.failed', {
+        error: (err as Error).message,
+        stack: (err as Error).stack?.slice(0, 400),
+      });
+      throw err;
     }
-    const { openInEditor } = await import('./editors');
-    await openInEditor(editorId, resolvedPath);
-    return { opened: true };
   });
 
   ipcMain.handle('sessions:list', () => {
