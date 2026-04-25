@@ -14,14 +14,18 @@ We use [Browser Use Harnessless](https://github.com/browser-use/browser-harness)
 
 **macOS (Apple Silicon):** [Browser-Use-arm64.dmg](https://github.com/browser-use/desktop-app/releases/latest/download/Browser-Use-arm64.dmg)
 
-The link always points to the latest release. Unsigned builds require right-click → Open on first launch.
+run: `xattr -dr com.apple.quarantine "/Applications/Browser Use.app"`
+
+> we are currently awaiting Apple Developer Account approval.
+
+The link always points to the latest release. 
 
 ## Providers
 
 - **Anthropic** - Claude Code Subscription or API Key
 - **Codex** - ChatGPT Subscription or API Key
 
-## Channels
+## Channels 
 
 Inbound message channels can trigger agent sessions automatically. 
 
