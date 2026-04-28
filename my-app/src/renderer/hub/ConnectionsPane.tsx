@@ -597,9 +597,9 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
             </div>
             <span className="conn-card__subtitle">
               {waStatus === 'connected' && waIdentity
-                ? `Connected as +${waIdentity.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4')} — text yourself to start sessions and receive agent notifications in WhatsApp.`
+                ? `Connected as +${waIdentity.replace(/(\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4')} — text yourself with @BU to start a session (e.g. "@BU find me a flight to NYC"). Messages without @BU are ignored, so the chat still works as a notes app.`
                 : waStatus === 'disconnected'
-                ? 'Connect WhatsApp to auto-configure self-chat task starts and agent notifications.'
+                ? 'Connect WhatsApp so you can text yourself @BU to launch sessions and get agent notifications back in the same chat.'
                 : statusText}
             </span>
           </div>
@@ -639,7 +639,7 @@ export function ConnectionsPane({ embedded }: ConnectionsPaneProps): React.React
               <div className="conn-card__qr-loading">Generating QR...</div>
             )}
             <p className="conn-card__qr-hint">
-              Open WhatsApp on your phone, go to Linked Devices, and scan this code. After linking, texting yourself will start sessions and notifications will come back to the same chat.
+              Open WhatsApp on your phone, go to Linked Devices, and scan this code. After linking, text yourself with @BU followed by a task (e.g. "@BU summarize my Linear inbox") to start a session — plain notes without @BU are ignored.
             </p>
           </div>
         )}

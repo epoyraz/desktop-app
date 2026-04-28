@@ -1051,7 +1051,7 @@ export function OnboardingApp() {
               <h1 className="step-title">Connect WhatsApp</h1>
             </div>
             <p className="step-subtitle">
-              Receive agent notifications and auto-configure WhatsApp so texting yourself can start sessions and send results back to you.
+              Connect WhatsApp so you can text yourself <strong>@BU</strong> followed by a task to start a session, and get the agent's results back in the same chat. Messages without @BU stay as plain notes.
             </p>
 
             {waStatus === 'connected' && (
@@ -1062,7 +1062,7 @@ export function OnboardingApp() {
                   </svg>
                 </div>
                 <p className="wa-connected__text">
-                  Connected as {waIdentity ?? 'WhatsApp'}. Text yourself on WhatsApp to start sessions and get agent notifications back in the same chat.
+                  Connected as {waIdentity ?? 'WhatsApp'}. Text yourself with <strong>@BU</strong> followed by a task (e.g. "@BU find me a flight to NYC") to start a session — plain notes without @BU are ignored.
                 </p>
               </div>
             )}
@@ -1075,7 +1075,7 @@ export function OnboardingApp() {
                   <div className="wa-qr__loading">Generating QR...</div>
                 )}
                 <p className="wa-qr__hint">
-                  Open WhatsApp on your phone, go to Linked Devices, and scan this code. Once connected, texting yourself will trigger sessions and send notifications back to that chat.
+                  Open WhatsApp on your phone, go to Linked Devices, and scan this code. After linking, text yourself with <strong>@BU</strong> followed by a task to start a session — messages without @BU are ignored, so the chat still works as a notes app.
                 </p>
               </div>
             )}

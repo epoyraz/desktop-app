@@ -289,6 +289,20 @@ export class WhatsAppAdapter implements ChannelAdapter {
         continue;
       }
 
+      // Self-chat doubles as a notes app — only spawn a session when the user
+      // explicitly mentions @BU. Strip the token from the prompt so the agent
+      // sees a clean instruction.
+      const triggerMatch = text.match(/(^|\s)@BU\b/i);
+      if (!triggerMatch) {
+        mainLogger.info('whatsapp.msg.skipNoTrigger', { remoteJid: msg.key.remoteJid });
+        continue;
+      }
+      const cleanedText = text.replace(/(^|\s)@BU\b\s*/i, '$1').trim();
+      if (!cleanedText) {
+        mainLogger.info('whatsapp.msg.skipEmptyAfterTrigger', { remoteJid: msg.key.remoteJid });
+        continue;
+      }
+
       const replyToMessageId =
         msg.message?.extendedTextMessage?.contextInfo?.stanzaId ?? undefined;
 
@@ -296,7 +310,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
       mainLogger.info('whatsapp.inbound', {
         from: msg.key.remoteJid,
         fromName: msg.pushName,
-        textLength: text.length,
+        textLength: cleanedText.length,
         replyToMessageId: replyToMessageId ?? null,
         inboundTs,
       });
@@ -305,7 +319,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
         channelId: 'whatsapp',
         from: msg.key.remoteJid,
         fromName: msg.pushName ?? msg.key.remoteJid,
-        text,
+        text: cleanedText,
         timestamp: (msg.messageTimestamp as number) * 1000,
         conversationId: msg.key.remoteJid,
         messageId: msg.key.id,
