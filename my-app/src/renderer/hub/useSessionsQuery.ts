@@ -69,15 +69,6 @@ export function useSessionsQuery() {
   return query;
 }
 
-export function useDismissSession() {
-  const qc = useQueryClient();
-  return (id: string) => {
-    qc.setQueryData<AgentSession[]>(SESSIONS_KEY, (prev = []) =>
-      prev.map((s) => (s.id === id ? { ...s, hidden: true } : s)),
-    );
-  };
-}
-
 export function useUpdateSession() {
   const qc = useQueryClient();
   return (id: string, update: Partial<AgentSession>) => {

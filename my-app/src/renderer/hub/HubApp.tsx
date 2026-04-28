@@ -6,7 +6,7 @@ import { KeybindingsOverlay } from './KeybindingsOverlay';
 import { CommandBar } from './CommandBar';
 import { SettingsPane } from './SettingsPane';
 import { useVimKeys } from './useVimKeys';
-import { useSessionsQuery, useDismissSession, useUpdateSession } from './useSessionsQuery';
+import { useSessionsQuery, useUpdateSession } from './useSessionsQuery';
 import { MemoryIndicator } from './MemoryIndicator';
 import { Sidebar } from './Sidebar';
 import { MOCK_SESSIONS } from './mock-data';
@@ -115,7 +115,6 @@ export function HubApp(): React.ReactElement {
   const isMock = import.meta.env.VITE_MOCK_MODE === '1';
   const [mockSessions, setMockSessions] = useState<AgentSession[]>(isMock ? MOCK_SESSIONS : []);
   const sessionsQuery = useSessionsQuery();
-  const dismissSession = useDismissSession();
   const updateSession = useUpdateSession();
   const sessions = isMock ? mockSessions : (sessionsQuery.data ?? []);
   const setSessions = isMock ? setMockSessions : () => {};
@@ -209,9 +208,8 @@ export function HubApp(): React.ReactElement {
     'action.dismiss': () => {
       const s = sessions[focusIndex];
       if (!s) return;
-      window.electronAPI?.sessions.viewDetach(s.id).catch(() => {});
       console.log('[VimKeys] dismiss session', s.id);
-      dismissSession(s.id);
+      window.electronAPI?.sessions.dismiss(s.id).catch((err) => console.error('[VimKeys] dismiss failed', err));
       setFocusIndex((i) => Math.min(i, sessions.length - 2));
     },
     // grid.nextPage / grid.prevPage removed — single-pane layout, no paging.
@@ -586,8 +584,13 @@ export function HubApp(): React.ReactElement {
                       }}
                       onFollowUp={handleFollowUp}
                       onDismiss={(id) => {
-                        window.electronAPI?.sessions.viewDetach(id).catch(() => {});
-                        dismissSession(id);
+                        // Real dismiss: flips session status to 'stopped' AND tears down the
+                        // pool entry. The previous viewDetach-only path left the WebContents
+                        // alive (so rerun talked to a stale browser) and only hid the card
+                        // locally — status stayed 'idle'.
+                        window.electronAPI?.sessions.dismiss(id).catch((err) =>
+                          console.error('[HubApp] dismiss failed', err),
+                        );
                       }}
                       onCancel={(id) => {
                         window.electronAPI?.sessions.cancel(id).catch(() => {});
