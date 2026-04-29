@@ -1,6 +1,6 @@
 /*
- * pill.css — Global command pill, exact copy of hub CommandBar styles.
- * No hex literals, no Inter, no !important.
+ * pill.css — Cmd+K command pill, liquid-glass aesthetic.
+ * No hex literals (theme tokens preferred), no Inter, no !important.
  */
 
 @import '../design/theme.global.css';
@@ -21,47 +21,48 @@ html, body {
   height: 100%;
 }
 
+/* ---------------------------------------------------------------------------
+   SHELL
+--------------------------------------------------------------------------- */
+
 .cmdbar__scrim {
   width: 100%;
   height: 100%;
 }
 
 .cmdbar {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: var(--color-bg-base);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-2xl);
+  border-radius: 16px;
   overflow: hidden;
   color: var(--color-fg-primary);
-  position: relative;
-  transition: box-shadow 120ms ease-out, filter 120ms ease-out;
+  background-image: linear-gradient(
+    180deg,
+    rgba(30, 30, 34, 0.58) 0%,
+    rgba(22, 22, 26, 0.62) 100%
+  );
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 18px 48px rgba(0, 0, 0, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+  animation: cmdbar-enter 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-.cmdbar--dragging {
-  box-shadow: 0 0 0 2px rgba(122, 162, 247, 0.55), 0 0 24px rgba(122, 162, 247, 0.25);
-}
-
-.cmdbar--dragging > *:not(.cmdbar__drag-handle):not(.cmdbar__drop-overlay) {
-  filter: blur(3px) brightness(0.7);
-  pointer-events: none;
-}
-
-.cmdbar__drop-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  color: var(--color-fg-primary);
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  background: rgba(10, 10, 13, 0.45);
-  backdrop-filter: blur(1px);
+@keyframes cmdbar-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .cmdbar__drag-handle {
@@ -69,246 +70,217 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  height: 12px;
+  height: 14px;
   -webkit-app-region: drag;
   cursor: move;
   z-index: 2;
 }
 
-.cmdbar__input-row {
+/* ---------------------------------------------------------------------------
+   SEARCH ROW
+--------------------------------------------------------------------------- */
+
+.cmdbar__search {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-6);
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: 18px 20px 14px 20px;
+  min-height: 64px;
+  box-sizing: border-box;
 }
 
-.cmdbar__actions {
-  display: flex;
+.cmdbar__search-icon {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--color-fg-tertiary);
+  margin-top: 2px;
 }
 
-.cmdbar__actions-spacer {
-  flex: 1;
+.cmdbar__search-icon--favicons {
+  width: auto;
+  min-width: 28px;
+  justify-content: flex-start;
 }
 
 .cmdbar__input {
-  width: 100%;
-  flex: none;
+  flex: 1;
   resize: none;
   background: none;
   border: none;
   outline: none;
   font-family: var(--font-ui);
-  font-size: var(--font-size-lg);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   color: var(--color-fg-primary);
-  line-height: var(--line-height-normal);
+  line-height: 1.5;
   min-height: 28px;
   max-height: 160px;
+  padding: 2px 0;
   overflow-y: auto;
 }
 
 .cmdbar__input::placeholder {
   color: var(--color-fg-tertiary);
-  opacity: 1;
-}
-
-.cmdbar__send {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  background-color: var(--color-fg-primary);
-  color: var(--color-bg-sunken);
-  transition-property: opacity, background-color, scale;
-  transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-out);
-}
-
-.cmdbar__send:hover {
   opacity: 0.85;
 }
 
-.cmdbar__send:active:not(:disabled) {
-  scale: 0.96;
-}
-
-.cmdbar__send:disabled {
-  background-color: var(--color-border-default);
-  color: var(--color-fg-disabled);
-  cursor: default;
-  opacity: 1;
-}
-
-.cmdbar__footer {
+.cmdbar__search-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  margin-top: auto;
-  min-height: 52px;
-  padding: 0 var(--space-6);
-  border-top: 1px solid var(--color-border-subtle);
-  -webkit-app-region: drag;
-  cursor: move;
-}
-
-.cmdbar__hint {
-  font-size: var(--font-size-2xs);
-  color: var(--color-fg-disabled);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.cmdbar__kbd {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-2xs);
-  color: var(--color-fg-tertiary);
-}
-
-.cmdbar__results {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--color-border-subtle);
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.cmdbar__result {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  min-height: 44px;
-  text-align: left;
-  font-size: var(--font-size-sm);
-  color: var(--color-fg-primary);
-  transition-property: background-color;
-  transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-out);
-}
-
-.cmdbar__result:hover,
-.cmdbar__result--active {
-  background-color: var(--color-surface-interactive-hover);
-}
-
-.cmdbar__dot {
-  position: relative;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
+  gap: 8px;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
-.cmdbar__dot--running {
-  background-color: var(--color-status-success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-success) 22%, transparent);
-}
-.cmdbar__dot--stuck {
-  background-color: var(--color-status-error);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-error) 22%, transparent);
-}
-.cmdbar__dot--idle {
-  background-color: var(--color-status-warning);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-warning) 20%, transparent);
-}
-.cmdbar__dot--stopped { background-color: var(--color-fg-tertiary); }
-.cmdbar__dot--draft   { background-color: var(--color-fg-disabled); }
+/* ---------------------------------------------------------------------------
+   ACTION BUTTONS — circular, glassy
+--------------------------------------------------------------------------- */
 
-.cmdbar__result-prompt {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-fg-primary);
-  line-height: 1.4;
-}
-
-.cmdbar__result-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  flex-shrink: 0;
-}
-
-.cmdbar__result-time {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-2xs);
-  color: var(--color-fg-tertiary);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
-.cmdbar__result-status {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 2px var(--space-3);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  min-width: 68px;
-  text-align: center;
-  background-color: color-mix(in srgb, currentColor 14%, transparent);
-}
-
-.cmdbar__result-status--running { color: var(--color-status-success); }
-.cmdbar__result-status--stuck   { color: var(--color-status-error); }
-.cmdbar__result-status--idle    { color: var(--color-status-warning); }
-.cmdbar__result-status--stopped { color: var(--color-fg-secondary); }
-.cmdbar__result-status--draft   { color: var(--color-fg-tertiary); }
-
-.cmdbar__result--create {
-  border-top: 1px solid var(--color-border-subtle);
-  color: var(--color-fg-primary);
-}
-
-.cmdbar__result-create-icon {
+.cmdbar__attach {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 8px;
-  height: 8px;
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  line-height: 0;
   color: var(--color-fg-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 140ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.cmdbar__result-kbd {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-2xs);
-  color: var(--color-fg-tertiary);
-  letter-spacing: 0.04em;
+.cmdbar__attach:hover {
+  color: var(--color-fg-primary);
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
 }
+
+.cmdbar__attach:active {
+  transform: scale(0.94);
+}
+
+.cmdbar__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fg-primary);
+  color: var(--color-bg-sunken);
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+  transition:
+    background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cmdbar__send:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.cmdbar__send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.cmdbar__send:disabled {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: var(--color-fg-disabled);
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+   SEARCH FAVICONS — replace magnifier when URL detected in input
+--------------------------------------------------------------------------- */
+
+.cmdbar__search-favicons {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cmdbar__search-favicon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-left: -4px;
+  filter:
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  animation: chip-in 160ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.cmdbar__search-favicon:first-child {
+  margin-left: 0;
+}
+
+.cmdbar__search-favicon-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  min-width: 22px;
+  padding: 0 5px;
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-fg-secondary);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  letter-spacing: 0.02em;
+  animation: chip-in 160ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+/* ---------------------------------------------------------------------------
+   CHIPS
+--------------------------------------------------------------------------- */
 
 .cmdbar__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-6) 0;
+  gap: 6px;
+  padding: 0 20px 10px 56px;
 }
 
 .cmdbar__chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  background-color: var(--color-bg-sunken);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-3);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  padding: 4px 4px 4px 10px;
   font-size: var(--font-size-xs);
   color: var(--color-fg-secondary);
-  max-width: 180px;
+  max-width: 200px;
+  animation: chip-in 160ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+@keyframes chip-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .cmdbar__chip-name {
@@ -322,84 +294,296 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: var(--color-fg-tertiary);
   background: transparent;
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-full);
   cursor: pointer;
-  transition-property: color, scale;
-  transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-out);
-}
-
-.cmdbar__chip-remove::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
+  transition: color 120ms ease-out, background-color 120ms ease-out;
 }
 
 .cmdbar__chip-remove:hover {
   color: var(--color-fg-primary);
-}
-
-.cmdbar__chip-remove:active {
-  scale: 0.96;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .cmdbar__error {
   font-size: var(--font-size-xs);
   color: var(--color-status-error);
-  padding: var(--space-2) var(--space-6) 0;
-}
-
-.cmdbar__attach {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: -7px;
-  padding: 0;
-  line-height: 0;
-  color: var(--color-fg-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition-property: color, background-color, scale;
-  transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-out);
-}
-
-.cmdbar__attach > svg {
-  display: block;
-}
-
-.cmdbar__attach:hover {
-  color: var(--color-fg-primary);
-  background-color: var(--color-bg-elevated);
-}
-
-.cmdbar__attach:active {
-  scale: 0.96;
-}
-
-.cmdbar__attach.has-tooltip::after {
-  bottom: auto;
-  top: 50%;
-  left: calc(100% + 8px);
-  transform: translateY(-50%) translateX(-2px);
-}
-.cmdbar__attach.has-tooltip:hover::after,
-.cmdbar__attach.has-tooltip:focus-visible::after {
-  transform: translateY(-50%) translateX(0);
+  padding: 0 20px 8px 56px;
 }
 
 /* ---------------------------------------------------------------------------
-   TOOLTIP — shared, CSS-only
+   DASHBOARD — empty-state actions + recents
+--------------------------------------------------------------------------- */
+
+.cmdbar__dashboard {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  animation: result-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.cmdbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.cmdbar__action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  height: 30px;
+  font-size: 12px;
+  color: var(--color-fg-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cmdbar__action-chip:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.10);
+  color: var(--color-fg-primary);
+}
+
+.cmdbar__action-chip:active {
+  transform: scale(0.97);
+}
+
+.cmdbar__action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-tertiary);
+  transition: color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cmdbar__action-chip:hover .cmdbar__action-icon {
+  color: var(--color-fg-primary);
+}
+
+.cmdbar__section-header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fg-tertiary);
+}
+
+.cmdbar__recents {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px 8px;
+}
+
+.cmdbar__recents .cmdbar__result {
+  transition: background-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cmdbar__recents .cmdbar__result:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ---------------------------------------------------------------------------
+   RESULTS — sliding highlight
+--------------------------------------------------------------------------- */
+
+.cmdbar__results {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 8px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  max-height: calc(56px * 8 + 12px);
+  overflow-y: auto;
+}
+
+.cmdbar__highlight {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  transition:
+    transform 280ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    opacity 160ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform, opacity;
+  z-index: 0;
+}
+
+.cmdbar__result {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  height: 56px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--color-fg-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  animation: result-in 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes result-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cmdbar__row-icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.cmdbar__row-icon img {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cmdbar__row-icon-fallback {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-tertiary);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  border-radius: 7px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.cmdbar__row-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(20, 20, 24, 0.95);
+  box-sizing: content-box;
+}
+
+.cmdbar__result-prompt {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--color-fg-primary);
+  line-height: 1.4;
+}
+
+.cmdbar__result-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.cmdbar__result-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-fg-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.cmdbar__result-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-fg-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------------------
+   FOOTER
+--------------------------------------------------------------------------- */
+
+.cmdbar__footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: auto;
+  height: 48px;
+  padding: 0 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+  -webkit-app-region: drag;
+  cursor: move;
+}
+
+.cmdbar__hint {
+  font-size: var(--font-size-2xs);
+  color: var(--color-fg-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cmdbar__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-fg-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------------------------
+   TOOLTIPS — shared, CSS-only
 --------------------------------------------------------------------------- */
 
 .has-tooltip {
@@ -412,21 +596,19 @@ html, body {
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%) translateY(2px);
-  padding: var(--space-2) var(--space-4);
+  padding: 4px 8px;
   font-size: var(--font-size-xs);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   color: var(--color-fg-primary);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
   pointer-events: none;
   opacity: 0;
-  transition-property: opacity, transform;
-  transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-out);
-  z-index: var(--z-tooltip, 9999);
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+  z-index: 9999;
 }
 
 .has-tooltip:hover::after,
@@ -435,9 +617,10 @@ html, body {
   transform: translateX(-50%) translateY(0);
 }
 
-/* EnginePicker — shared with hub's TaskInput. Duplicated from hub.css so
-   the pill renderer (which doesn't import hub.css) can style it correctly.
-   Without these rules the raw SVG logo renders at its intrinsic 316×320. */
+/* ---------------------------------------------------------------------------
+   ENGINE PICKER — inherits from hub but restyled for glass shell
+--------------------------------------------------------------------------- */
+
 .engine-logo {
   display: inline-flex;
   width: 14px;
@@ -453,55 +636,72 @@ html, body {
   position: relative;
   flex-shrink: 0;
 }
+
 .engine-picker__toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  background-color: var(--color-bg-elevated);
+  padding: 4px 10px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-fg-secondary);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: var(--font-size-xs);
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
+  transition:
+    background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
 }
+
 .engine-picker__toggle:hover {
-  background-color: var(--color-bg-hover, var(--color-border-subtle));
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
   color: var(--color-fg-primary);
 }
+
 .engine-picker__name { white-space: nowrap; }
+
 .engine-picker__dot {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
   background-color: var(--color-status-warning);
 }
+
 .engine-picker__menu {
   position: absolute;
-  bottom: calc(100% + 4px);
+  top: calc(100% + 6px);
   right: 0;
+  bottom: auto;
   min-width: 220px;
-  background-color: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  background-color: rgba(28, 28, 32, 0.96);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(0, 0, 0, 0.45);
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 12px 32px rgba(0, 0, 0, 0.5);
   z-index: 40;
-  padding: var(--space-2);
+  padding: 4px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+
 .engine-picker__item {
   display: flex;
   align-items: center;
   gap: 4px;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
 }
-.engine-picker__item--active { background-color: var(--color-bg-sunken); }
+
+.engine-picker__item--active {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
 .engine-picker__item-select {
   appearance: none;
   background: transparent;
@@ -514,56 +714,42 @@ html, body {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-sm);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   cursor: pointer;
 }
+
 .engine-picker__item-select:hover {
-  background-color: var(--color-bg-hover, var(--color-border-subtle));
+  background-color: rgba(255, 255, 255, 0.06);
 }
+
 .engine-picker__item-name { flex: 1; }
+
 .engine-picker__check {
   color: var(--color-fg-tertiary);
   font-size: var(--font-size-xs);
 }
+
 .engine-picker__item-login {
   appearance: none;
   background: transparent;
-  border: 1px solid var(--color-border-default);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   color: var(--color-fg-secondary);
   font-size: var(--font-size-xs);
   padding: 3px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   cursor: pointer;
   margin-right: 4px;
 }
+
 .engine-picker__item-login:hover:not(:disabled) {
   color: var(--color-fg-primary);
-  background-color: var(--color-bg-hover, var(--color-border-subtle));
+  background-color: rgba(255, 255, 255, 0.06);
 }
+
 .engine-picker__item-login:disabled { opacity: 0.6; cursor: default; }
+
 .engine-picker__item-hint {
   color: var(--color-fg-tertiary);
   font-size: var(--font-size-xs);
   padding-right: 8px;
-}
-
-/* Pill-scoped overrides: the pill BrowserWindow can't draw above its top
-   edge, so flip the dropdown downward. Also push the picker away from the
-   paperclip with margin-left:auto so it feels intentional, not crammed. */
-.cmdbar__engine-picker {
-  margin-left: auto;
-}
-.cmdbar__engine-picker .engine-picker__toggle {
-  height: 28px;
-  background-color: transparent;
-  border-color: var(--color-border-subtle);
-  color: var(--color-fg-primary);
-}
-.cmdbar__engine-picker .engine-picker__toggle:hover {
-  background-color: var(--color-bg-elevated);
-  color: var(--color-fg-primary);
-}
-.cmdbar__engine-picker .engine-picker__menu {
-  top: calc(100% + 4px);
-  bottom: auto;
 }

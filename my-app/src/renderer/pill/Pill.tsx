@@ -6,6 +6,20 @@ import {
   formatBytes,
 } from '../../shared/attachments';
 import { EnginePicker } from '../hub/EnginePicker';
+import {
+  RESULT_ROW_HEIGHT,
+  MAX_RESULTS,
+  SEARCH_ROW_HEIGHT,
+  FOOTER_HEIGHT,
+  CHIP_ROW_HEIGHT,
+  ERROR_ROW_HEIGHT,
+  TEXTAREA_MIN_HEIGHT,
+  TEXTAREA_MAX_HEIGHT,
+  MAX_RECENTS,
+  ACTIONS_ROW_HEIGHT,
+  SECTION_HEADER_HEIGHT,
+  MAX_VISIBLE_FAVICONS,
+} from './constants';
 
 declare global {
   interface Window {
@@ -17,24 +31,91 @@ declare global {
       ) => Promise<{ task_id: string }>;
       hide: () => void;
       setExpanded: (expanded: boolean | number) => void;
-      listSessions: () => Promise<Array<{ id: string; prompt: string; status: string; createdAt: number }>>;
+      listSessions: () => Promise<Array<{ id: string; prompt: string; status: string; createdAt: number; primarySite?: string | null; lastActivityAt?: number }>>;
       selectSession: (id: string) => void;
-      followUpSubmit: (
-        sessionId: string,
-        prompt: string,
-        attachments?: Array<{ name: string; mime: string; bytes: Uint8Array }>,
-      ) => Promise<{ resumed?: boolean; error?: string }>;
-      onFollowUpMode: (cb: (data: { sessionId: string; sessionPrompt: string }) => void) => () => void;
-      // Mode management
+      openHub?: () => void;
+      openSettings?: () => void;
       setMode?: (mode: 'pill' | 'panel' | 'hidden') => Promise<{ mode: string }>;
       getMode?: () => Promise<'pill' | 'panel' | 'hidden'>;
       onPillModeChanged?: (cb: (mode: 'pill' | 'panel' | 'hidden') => void) => () => void;
-      // Active session
       setActiveSession?: (id: string | null) => Promise<{ ok: boolean }>;
       getActiveSession?: () => Promise<string | null>;
       onActiveSessionChanged?: (cb: (id: string | null) => void) => () => void;
     };
   }
+}
+
+interface SessionLite {
+  id: string;
+  prompt: string;
+  status: string;
+  createdAt: number;
+  primarySite?: string | null;
+  lastActivityAt?: number;
+}
+
+function cleanDomain(site: string | null | undefined): string | null {
+  if (!site) return null;
+  const clean = site.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+  return clean || null;
+}
+
+const FAVICON_SIZE = 64;
+
+function faviconUrl(site: string | null | undefined): string | null {
+  const clean = cleanDomain(site);
+  if (!clean) return null;
+  return `https://www.google.com/s2/favicons?domain=${clean}&sz=${FAVICON_SIZE}`;
+}
+
+const DOMAIN_RE = /\b((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/[^\s]*)?/i;
+const DOMAIN_RE_GLOBAL = /\b((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/[^\s]*)?/gi;
+
+function extractDomain(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(DOMAIN_RE);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function extractDomains(text: string): string[] {
+  if (!text) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of text.matchAll(DOMAIN_RE_GLOBAL)) {
+    const d = m[1].toLowerCase();
+    if (!seen.has(d)) {
+      seen.add(d);
+      out.push(d);
+    }
+  }
+  return out;
+}
+
+function TerminalFallbackIcon(): React.ReactElement {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4 6l2 1.5L4 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7.5 9h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const STATUS_DOT_COLOR: Record<string, string> = {
+  running: 'var(--color-status-success)',
+  idle:    'var(--color-status-warning)',
+  stuck:   'var(--color-status-error)',
+  stopped: 'var(--color-fg-tertiary)',
+  draft:   'var(--color-fg-disabled)',
+};
+
+function SearchIcon(): React.ReactElement {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M11 11L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function PaperclipIcon(): React.ReactElement {
@@ -53,17 +134,27 @@ function PillCloseIcon(): React.ReactElement {
   );
 }
 
-interface SessionLite {
-  id: string;
-  prompt: string;
-  status: string;
-  createdAt: number;
-}
-
 function ArrowUpIcon(): React.ReactElement {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <path d="M7 12V3M3 6.5L7 2.5L11 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GearIcon(): React.ReactElement {
+  return (
+    <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+      <circle cx="6" cy="6" r="2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.5 2.5l1 1M8.5 8.5l1 1M9.5 2.5l-1 1M3.5 8.5l-1 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function OpenHubIcon(): React.ReactElement {
+  return (
+    <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+      <path d="M4.5 2H2v8h8V7.5M6.5 2H10v3.5M5 7l5-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -95,24 +186,14 @@ function statusDot(status: string): string {
   }
 }
 
-function statusTagClass(status: string): string {
-  switch (status) {
-    case 'running': return 'cmdbar__result-status--running';
-    case 'stuck': return 'cmdbar__result-status--stuck';
-    case 'idle': return 'cmdbar__result-status--idle';
-    case 'draft': return 'cmdbar__result-status--draft';
-    default: return 'cmdbar__result-status--stopped';
-  }
-}
-
 function statusLabel(status: string): string {
   switch (status) {
-    case 'running': return 'RUNNING';
-    case 'stuck': return 'STUCK';
-    case 'idle': return 'IDLE';
-    case 'draft': return 'DRAFT';
-    case 'stopped': return 'STOPPED';
-    default: return status.toUpperCase();
+    case 'running': return 'running';
+    case 'stuck': return 'stuck';
+    case 'idle': return 'idle';
+    case 'draft': return 'draft';
+    case 'stopped': return 'stopped';
+    default: return status;
   }
 }
 
@@ -120,25 +201,17 @@ export function Pill(): React.ReactElement {
   const [value, setValue] = useState('');
   const [sessions, setSessions] = useState<SessionLite[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(-1);
-  const [followUp, setFollowUp] = useState<{ sessionId: string; sessionPrompt: string } | null>(null);
   const [engine, setEngine] = useState<string>('claude-code');
-  const [engineMenuOpen, setEngineMenuOpen] = useState(false);
   const [attachments, setAttachments] = useState<Array<{ name: string; mime: string; bytes: Uint8Array }>>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [validFavicons, setValidFavicons] = useState<Set<string>>(new Set());
+  const checkedDomainsRef = useRef<Set<string>>(new Set());
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setTimeout(() => ref.current?.focus(), 50);
     window.pillAPI.listSessions().then(setSessions).catch(() => {});
-    const unsub = window.pillAPI.onFollowUpMode((data) => {
-      setFollowUp(data);
-      setValue('');
-      setAttachments([]);
-      setAttachError(null);
-      setTimeout(() => ref.current?.focus(), 50);
-    });
-    return unsub;
   }, []);
 
   useEffect(() => {
@@ -149,28 +222,81 @@ export function Pill(): React.ReactElement {
     if (!value.trim()) return [];
     return sessions
       .filter((s) => fuzzyMatch(value, s.prompt))
-      .slice(0, 8);
+      .slice(0, MAX_RESULTS);
   }, [value, sessions]);
 
   const hasResults = results.length > 0;
+
+  const recents = useMemo(() => {
+    if (value.trim()) return [];
+    return [...sessions]
+      .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
+      .slice(0, MAX_RECENTS);
+  }, [value, sessions]);
+
+  const showDashboard = !value.trim();
+  const hasRecents = showDashboard && recents.length > 0;
+
+  const detectedDomains = useMemo(() => extractDomains(value), [value]);
+
+  useEffect(() => {
+    const candidates = new Set<string>();
+    for (const d of detectedDomains) candidates.add(d);
+    for (const s of sessions) {
+      const d = cleanDomain(s.primarySite ?? extractDomain(s.prompt));
+      if (d) candidates.add(d);
+    }
+    for (const domain of candidates) {
+      if (checkedDomainsRef.current.has(domain)) continue;
+      checkedDomainsRef.current.add(domain);
+      const url = faviconUrl(domain);
+      if (!url) continue;
+      const img = new Image();
+      img.onload = () => {
+        const valid = img.naturalWidth === FAVICON_SIZE && img.naturalHeight === FAVICON_SIZE;
+        console.log(`[Pill] favicon probe ${JSON.stringify({
+          domain,
+          naturalW: img.naturalWidth,
+          naturalH: img.naturalHeight,
+          valid,
+        })}`);
+        if (valid) {
+          setValidFavicons((prev) => {
+            if (prev.has(domain)) return prev;
+            const next = new Set(prev);
+            next.add(domain);
+            return next;
+          });
+        }
+      };
+      img.onerror = () => {
+        console.log(`[Pill] favicon probe error ${JSON.stringify({ domain })}`);
+      };
+      img.src = url;
+    }
+  }, [detectedDomains, sessions]);
 
   useEffect(() => {
     const ta = ref.current;
     if (ta) {
       ta.style.height = 'auto';
-      ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
+      ta.style.height = `${Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
     }
-    const textareaHeight = ta ? Math.max(28, Math.min(ta.scrollHeight, 240)) : 28;
-    const baseHeight = 113 + textareaHeight;
-    const resultHeight = hasResults ? Math.min(results.length, 8) * 44 + 2 : 0;
-    // Chips row is ~24px; wraps every ~3 chips. Error row adds ~18px.
+    const taHeight = ta
+      ? Math.max(TEXTAREA_MIN_HEIGHT, Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT))
+      : TEXTAREA_MIN_HEIGHT;
+    const searchHeight = Math.max(SEARCH_ROW_HEIGHT, taHeight + 36);
+    const resultHeight = hasResults ? Math.min(results.length, MAX_RESULTS) * RESULT_ROW_HEIGHT + 12 : 0;
+    const dashboardHeight = showDashboard
+      ? ACTIONS_ROW_HEIGHT + (hasRecents ? SECTION_HEADER_HEIGHT + recents.length * RESULT_ROW_HEIGHT + 8 : 0)
+      : 0;
     const chipsRows = attachments.length > 0 ? Math.ceil(attachments.length / 3) : 0;
-    const chipsHeight = chipsRows * 26;
-    const errorHeight = attachError ? 20 : 0;
-    const total = baseHeight + resultHeight + chipsHeight + errorHeight;
-    console.log('[Pill.resize]', { textareaHeight, baseHeight, resultHeight, chipsHeight, errorHeight, total, scrollHeight: ta?.scrollHeight, valueLength: value.length });
+    const chipsHeight = chipsRows * CHIP_ROW_HEIGHT;
+    const errorHeight = attachError ? ERROR_ROW_HEIGHT : 0;
+    const total = searchHeight + resultHeight + dashboardHeight + chipsHeight + errorHeight + FOOTER_HEIGHT;
+    console.log('[Pill.resize]', { taHeight, searchHeight, resultHeight, dashboardHeight, chipsHeight, errorHeight, total });
     window.pillAPI.setExpanded(total);
-  }, [hasResults, results.length, value, attachments.length, attachError]);
+  }, [hasResults, results.length, value, attachments.length, attachError, showDashboard, hasRecents, recents.length]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     setAttachError(null);
@@ -210,15 +336,6 @@ export function Pill(): React.ReactElement {
   const submit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed && attachments.length === 0) return;
-    if (followUp) {
-      window.pillAPI.followUpSubmit(followUp.sessionId, trimmed, attachments.length > 0 ? attachments : undefined);
-      setValue('');
-      setAttachments([]);
-      setAttachError(null);
-      setFollowUp(null);
-      window.pillAPI.hide();
-      return;
-    }
     if (!trimmed) return;
     const attachArg = attachments.length > 0 ? attachments : undefined;
     if (hasResults && selectedIdx >= 0 && selectedIdx < results.length) {
@@ -230,13 +347,12 @@ export function Pill(): React.ReactElement {
     setValue('');
     setAttachments([]);
     setAttachError(null);
-  }, [value, hasResults, selectedIdx, results, followUp, attachments, engine]);
+  }, [value, hasResults, selectedIdx, results, attachments, engine]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        setFollowUp(null);
         setValue('');
         setAttachments([]);
         setAttachError(null);
@@ -265,82 +381,57 @@ export function Pill(): React.ReactElement {
     [submit, value, results.length, attachments, engine],
   );
 
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounter = useRef(0);
-
-  const onDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    dragCounter.current += 1;
-    if (dragCounter.current === 1) setIsDragging(true);
-  }, []);
-
-  const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) setIsDragging(false);
-  }, []);
-
-  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    dragCounter.current = 0;
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      void addFiles(e.dataTransfer.files);
-      ref.current?.focus();
-    }
-  }, [addFiles]);
-
-  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  }, []);
+  const highlightVisible = hasResults && selectedIdx >= 0;
+  const highlightTop = selectedIdx * RESULT_ROW_HEIGHT;
 
   return (
     <div className="cmdbar__scrim" onClick={() => window.pillAPI.hide()}>
-      <div
-        className={`cmdbar${isDragging ? ' cmdbar--dragging' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDragLeave={onDragLeave}
-      >
+      <div className="cmdbar" onClick={(e) => e.stopPropagation()}>
         <div className="cmdbar__drag-handle" />
-        {isDragging && (
-          <div className="cmdbar__drop-overlay">Drop files to attach</div>
-        )}
-        {attachments.length > 0 && (
-          <div className="cmdbar__chips">
-            {attachments.map((a, i) => (
-              <span key={`${a.name}-${i}`} className="cmdbar__chip" title={`${a.mime} · ${formatBytes(a.bytes.byteLength)}`}>
-                <span className="cmdbar__chip-name">{a.name}</span>
-                <button
-                  type="button"
-                  className="cmdbar__chip-remove"
-                  onClick={() => removeAttachment(i)}
-                  aria-label={`Remove ${a.name}`}
-                >
-                  <PillCloseIcon />
-                </button>
+
+        <div className="cmdbar__search">
+          {(() => {
+            const valid = detectedDomains.filter((d) => validFavicons.has(d));
+            return (
+              <span
+                className={`cmdbar__search-icon${valid.length > 0 ? ' cmdbar__search-icon--favicons' : ''}`}
+                aria-hidden="true"
+              >
+                {valid.length > 0 ? (
+                  <span className="cmdbar__search-favicons">
+                    {valid.slice(0, MAX_VISIBLE_FAVICONS).map((d) => (
+                      <img
+                        key={d}
+                        src={faviconUrl(d) ?? ''}
+                        alt=""
+                        width={18}
+                        height={18}
+                        className="cmdbar__search-favicon"
+                      />
+                    ))}
+                    {valid.length > MAX_VISIBLE_FAVICONS && (
+                      <span className="cmdbar__search-favicon-more">
+                        +{valid.length - MAX_VISIBLE_FAVICONS}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <SearchIcon />
+                )}
               </span>
-            ))}
-          </div>
-        )}
-        {attachError && <div className="cmdbar__error">{attachError}</div>}
-        <div className="cmdbar__input-row">
+            );
+          })()}
           <textarea
             ref={ref}
             className="cmdbar__input"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={followUp ? `Follow up on: ${followUp.sessionPrompt.slice(0, 40)}${followUp.sessionPrompt.length > 40 ? '...' : ''}` : 'Search sessions or create new agent...'}
+            placeholder="Search sessions or create new agent..."
             rows={1}
             aria-label="Search or create"
           />
-          <div className="cmdbar__actions">
+          <div className="cmdbar__search-actions">
             <button
               type="button"
               className="cmdbar__attach has-tooltip"
@@ -360,12 +451,9 @@ export function Pill(): React.ReactElement {
                 e.target.value = '';
               }}
             />
-            <div className="cmdbar__actions-spacer" />
-            {!followUp && (
-              <div className="cmdbar__engine-picker">
-                <EnginePicker value={engine} onChange={setEngine} onOpenChange={setEngineMenuOpen} />
-              </div>
-            )}
+            <div className="cmdbar__engine-picker">
+              <EnginePicker value={engine} onChange={setEngine} onOpenChange={() => {}} />
+            </div>
             <button
               className="cmdbar__send"
               onClick={submit}
@@ -377,47 +465,142 @@ export function Pill(): React.ReactElement {
           </div>
         </div>
 
-        {hasResults && !followUp && (
+        {attachments.length > 0 && (
+          <div className="cmdbar__chips">
+            {attachments.map((a, i) => (
+              <span key={`${a.name}-${i}`} className="cmdbar__chip" title={`${a.mime} · ${formatBytes(a.bytes.byteLength)}`}>
+                <span className="cmdbar__chip-name">{a.name}</span>
+                <button
+                  type="button"
+                  className="cmdbar__chip-remove"
+                  onClick={() => removeAttachment(i)}
+                  aria-label={`Remove ${a.name}`}
+                >
+                  <PillCloseIcon />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {attachError && <div className="cmdbar__error">{attachError}</div>}
+
+        {showDashboard && (
+          <div className="cmdbar__dashboard">
+            <div className="cmdbar__actions">
+              <button
+                type="button"
+                className="cmdbar__action-chip"
+                onClick={() => { window.pillAPI.openHub?.(); }}
+              >
+                <span className="cmdbar__action-icon"><OpenHubIcon /></span>
+                Open hub
+              </button>
+              <button
+                type="button"
+                className="cmdbar__action-chip"
+                onClick={() => { window.pillAPI.openSettings?.(); }}
+              >
+                <span className="cmdbar__action-icon"><GearIcon /></span>
+                Settings
+              </button>
+            </div>
+
+            {hasRecents && (
+              <>
+                <div className="cmdbar__section-header">Recent</div>
+                <div className="cmdbar__recents">
+                  {recents.map((s, i) => {
+                    const domain = cleanDomain(s.primarySite ?? extractDomain(s.prompt));
+              const favicon = domain && validFavicons.has(domain) ? faviconUrl(domain) : null;
+                    const dotColor = STATUS_DOT_COLOR[s.status] ?? STATUS_DOT_COLOR.stopped;
+                    const last = s.lastActivityAt ?? s.createdAt;
+                    return (
+                      <button
+                        key={s.id}
+                        className="cmdbar__result"
+                        style={{ animationDelay: `${i * 30}ms` }}
+                        onClick={() => { window.pillAPI.selectSession(s.id); }}
+                      >
+                        <span className="cmdbar__row-icon">
+                          {favicon ? (
+                            <img src={favicon} alt="" width={18} height={18} />
+                          ) : (
+                            <span className="cmdbar__row-icon-fallback" aria-hidden="true">
+                              <TerminalFallbackIcon />
+                            </span>
+                          )}
+                          <span className="cmdbar__row-dot" style={{ background: dotColor }} aria-label={statusLabel(s.status)} />
+                        </span>
+                        <span className="cmdbar__result-prompt">{s.prompt}</span>
+                        <span className="cmdbar__result-time">{formatElapsed(last)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {hasResults && (
           <div
             className="cmdbar__results"
             onMouseLeave={() => setSelectedIdx(-1)}
           >
-            {results.map((s, i) => (
-              <button
-                key={s.id}
-                className={`cmdbar__result${i === selectedIdx ? ' cmdbar__result--active' : ''}`}
-                onClick={() => { window.pillAPI.selectSession(s.id); setValue(''); }}
-                onMouseEnter={() => setSelectedIdx(i)}
-              >
-                <span className={`cmdbar__dot ${statusDot(s.status)}`} />
-                <span className="cmdbar__result-prompt">{s.prompt}</span>
-                <span className="cmdbar__result-meta">
-                  <span className="cmdbar__result-time">{formatElapsed(s.createdAt)}</span>
-                  <span className={`cmdbar__result-status ${statusTagClass(s.status)}`}>
-                    {statusLabel(s.status)}
+            <div
+              className="cmdbar__highlight"
+              style={{
+                transform: `translateY(${highlightTop}px)`,
+                opacity: highlightVisible ? 1 : 0,
+              }}
+              aria-hidden="true"
+            />
+            {results.map((s, i) => {
+              const domain = cleanDomain(s.primarySite ?? extractDomain(s.prompt));
+              const favicon = domain && validFavicons.has(domain) ? faviconUrl(domain) : null;
+              const dotColor = STATUS_DOT_COLOR[s.status] ?? STATUS_DOT_COLOR.stopped;
+              const last = s.lastActivityAt ?? s.createdAt;
+              return (
+                <button
+                  key={s.id}
+                  className="cmdbar__result"
+                  style={{ animationDelay: `${i * 30}ms` }}
+                  onClick={() => { window.pillAPI.selectSession(s.id); setValue(''); }}
+                  onMouseEnter={() => setSelectedIdx(i)}
+                >
+                  <span className="cmdbar__row-icon">
+                    {favicon ? (
+                      <img src={favicon} alt="" width={18} height={18} />
+                    ) : (
+                      <span className="cmdbar__row-icon-fallback" aria-hidden="true">
+                        <TerminalFallbackIcon />
+                      </span>
+                    )}
+                    <span className="cmdbar__row-dot" style={{ background: dotColor }} aria-label={statusLabel(s.status)} />
                   </span>
-                </span>
-              </button>
-            ))}
+                  <span className="cmdbar__result-prompt">{s.prompt}</span>
+                  <span className="cmdbar__result-time">{formatElapsed(last)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
         <div className="cmdbar__footer">
           <span className="cmdbar__hint">
-            <kbd className="cmdbar__kbd">Enter</kbd>{' '}
-            {followUp
-              ? 'follow up'
-              : hasResults && selectedIdx >= 0
-                ? 'open'
-                : 'create'}
+            <kbd className="cmdbar__kbd">↵</kbd>
+            {hasResults && selectedIdx >= 0 ? 'open' : 'create'}
           </span>
-          {hasResults && !followUp && (
+          {hasResults && (
             <span className="cmdbar__hint">
-              <kbd className="cmdbar__kbd">{'\u2318\u21B5'}</kbd> new agent
+              <kbd className="cmdbar__kbd">⌘↵</kbd>
+              new agent
             </span>
           )}
           <span className="cmdbar__hint">
-            <kbd className="cmdbar__kbd">Esc</kbd> {followUp ? 'cancel' : 'close'}
+            <kbd className="cmdbar__kbd">esc</kbd>
+            close
           </span>
         </div>
       </div>
