@@ -19,12 +19,12 @@
 :root {
   /* Slate scale — 0 = darkest, 12 = lightest */
   --slate-0:  #030305;
-  --slate-1:  #070709;
-  --slate-2:  #0a0a0d;
-  --slate-3:  #0f0f12;
-  --slate-4:  #111114;
-  --slate-5:  #14141a;
-  --slate-6:  #16161a;
+  --slate-1:  #0e0e11;
+  --slate-2:  #131318;
+  --slate-3:  #181820;
+  --slate-4:  #1d1d26;
+  --slate-5:  #22222c;
+  --slate-6:  #292932;
   --slate-7:  #1e1e24;
   --slate-8:  #282830;
   --slate-9:  #3a3a44;

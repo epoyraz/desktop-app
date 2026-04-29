@@ -46,7 +46,7 @@ void main() {
   dotMask *= smoothstep(0.02, 0.12, density);
 
   vec3 dotColor = vec3(0.32, 0.38, 0.52);
-  vec3 bg = vec3(0.027, 0.027, 0.035);
+  vec3 bg = vec3(0.055, 0.055, 0.067);
   fragColor = vec4(mix(bg, dotColor, dotMask * 0.55), 1.0);
 }
 `;
