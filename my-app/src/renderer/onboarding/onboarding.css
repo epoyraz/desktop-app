@@ -343,6 +343,7 @@ html, body {
   align-items: center;
   gap: 14px;
   width: 100%;
+  margin-bottom: 10px;
   padding: 14px 16px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-subtle);
@@ -490,6 +491,84 @@ html, body {
 .apikey-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Merged provider card: tabs at top swap interior ("Connect subscription"
+   vs "Use API key") without changing the card's outer dimensions. */
+.provider-card {
+  width: 100%;
+  margin-bottom: 10px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.provider-card__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.provider-card__tab {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--color-fg-tertiary);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.provider-card__tab:hover {
+  color: var(--color-fg-secondary);
+}
+
+.provider-card__tab.is-active {
+  color: var(--color-fg-primary);
+  border-bottom-color: var(--color-accent-default);
+}
+
+.provider-card__body {
+  padding: 14px 16px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.provider-card__action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-card__action:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.provider-card__keyform {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.provider-card__keyform .apikey-input-wrap {
+  margin-bottom: 10px;
 }
 
 /* Per-provider "Use X API key instead" expandable input. Sits directly

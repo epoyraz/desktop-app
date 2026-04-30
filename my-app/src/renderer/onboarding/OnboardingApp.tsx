@@ -97,7 +97,7 @@ declare global {
   }
 }
 
-type Step = 'intro' | 'profile' | 'apikey' | 'whatsapp' | 'notifications' | 'shortcut';
+type Step = 'intro' | 'profile' | 'apikey' | 'notifications' | 'shortcut';
 
 const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+Space';
 
@@ -236,7 +236,7 @@ function PreferencesStep({
   );
 }
 
-const VALID_STEPS: readonly Step[] = ['intro', 'profile', 'apikey', 'whatsapp', 'notifications', 'shortcut'];
+const VALID_STEPS: readonly Step[] = ['intro', 'profile', 'apikey', 'notifications', 'shortcut'];
 
 export function OnboardingApp() {
   const [step, setStep] = useState<Step>('intro');
@@ -497,9 +497,6 @@ export function OnboardingApp() {
   const [shortcutActivated, setShortcutActivated] = useState(false);
   const [pillOpen, setPillOpen] = useState(false);
 
-  const [waStatus, setWaStatus] = useState<string>('disconnected');
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [waIdentity, setWaIdentity] = useState<string | null>(null);
 
   useEffect(() => {
     window.onboardingAPI.detectChromeProfiles().then((p) => {
@@ -554,7 +551,7 @@ export function OnboardingApp() {
     setSaving(true);
     try {
       await window.onboardingAPI.saveApiKey(apiKey.trim());
-      setStep('whatsapp');
+      setStep('notifications');
     } catch (err) {
       console.error('[onboarding] save key failed', err);
     } finally {
@@ -592,7 +589,7 @@ export function OnboardingApp() {
     try {
       await window.onboardingAPI.saveOpenAIKey(openaiKey.trim());
       console.log('[onboarding] handleSaveOpenaiKeyAndContinue: saved, advancing');
-      setStep('whatsapp');
+      setStep('notifications');
     } catch (err) {
       console.error('[onboarding] save openai key failed', err);
     } finally {
@@ -627,19 +624,14 @@ export function OnboardingApp() {
       if (openaiKey.trim()) {
         window.onboardingAPI.capture?.('onboarding_provider_selected', { provider: 'openai-key' });
       }
-      console.log('[onboarding] handleStepSaveAndContinue: advancing to whatsapp step');
-      setStep('whatsapp');
+      console.log('[onboarding] handleStepSaveAndContinue: advancing to notifications step');
+      setStep('notifications');
     } catch (err) {
       console.error('[onboarding] handleStepSaveAndContinue threw', err);
     } finally {
       setStepSaving(false);
     }
   }, [claudeCode?.authed, codex?.authed, apiKey, openaiKey]);
-
-  const handleConnectWhatsApp = useCallback(async () => {
-    setQrDataUrl(null);
-    await window.onboardingAPI.whatsapp.connect();
-  }, []);
 
   const handleFinish = useCallback(async () => {
     window.onboardingAPI.capture?.('onboarding_completed');
@@ -653,23 +645,6 @@ export function OnboardingApp() {
       console.error('[onboarding] complete failed', err);
     }
   }, []);
-
-  // WhatsApp status listeners
-  useEffect(() => {
-    if (step !== 'whatsapp') return;
-    const unsubQr = window.onboardingAPI.onWhatsappQr((dataUrl) => {
-      setQrDataUrl(dataUrl);
-    });
-    const unsubStatus = window.onboardingAPI.onChannelStatus((channelId, status, detail) => {
-      if (channelId !== 'whatsapp') return;
-      setWaStatus(status);
-      if (status === 'connected' && detail) {
-        setWaIdentity(detail);
-        setQrDataUrl(null);
-      }
-    });
-    return () => { unsubQr(); unsubStatus(); };
-  }, [step]);
 
   // Shortcut step: register default, listen for activation + task submission
   useEffect(() => {
@@ -727,7 +702,7 @@ export function OnboardingApp() {
 
       <div className={`onboarding-content ${step === 'intro' ? 'onboarding-content-wide' : ''}`}>
         <div className="step-indicator">
-          {(['intro', 'profile', 'apikey', 'whatsapp', 'notifications', 'shortcut'] as Step[]).map((s, i, all) => {
+          {(['intro', 'profile', 'apikey', 'notifications', 'shortcut'] as Step[]).map((s, i, all) => {
             const currentIdx = all.indexOf(step);
             const thisIdx = i;
             const cls = thisIdx < currentIdx ? 'done' : thisIdx === currentIdx ? 'active' : '';
@@ -868,6 +843,7 @@ export function OnboardingApp() {
                     setImportResult(null);
                     setImportedProfile(null);
                     setImportError(null);
+                    setStep('intro');
                   }}
                 >
                   Back
@@ -879,6 +855,12 @@ export function OnboardingApp() {
               <div className="import-result import-result-error">
                 {importError}
               </div>
+            )}
+
+            {!importResult && (
+              <button className="back-btn" onClick={() => setStep('intro')}>
+                Back
+              </button>
             )}
           </div>
         )}
@@ -906,82 +888,100 @@ export function OnboardingApp() {
               </div>
             )}
 
-            {/* Installed but not authed → offer to start the Claude sign-in flow */}
-            {claudeCode?.installed && !claudeCode?.authed && !usingClaudeCode && (
-              <button
-                type="button"
-                className="claude-code-card"
-                onClick={handleStartClaudeLogin}
-                disabled={waitingForLogin}
-              >
-                <div className="claude-code-card__icon">
-                  <img src={claudeCodeLogo} alt="" />
+            {/* Not authed → one card with two interior options: subscription or API key.
+                Switching once configured happens in Settings. */}
+            {claudeCode && !claudeCode.authed && !usingClaudeCode && (
+              <div className="provider-card">
+                <div className="provider-card__tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!showAnthropicInput}
+                    className={`provider-card__tab${!showAnthropicInput ? ' is-active' : ''}`}
+                    onClick={() => setShowAnthropicInput(false)}
+                  >
+                    Connect subscription
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={showAnthropicInput}
+                    className={`provider-card__tab${showAnthropicInput ? ' is-active' : ''}`}
+                    onClick={() => setShowAnthropicInput(true)}
+                  >
+                    Use API key
+                  </button>
                 </div>
-                <div className="claude-code-card__text">
-                  <div className="claude-code-card__title">
-                    {waitingForLogin ? 'Waiting for login…' : 'Click to log in'}
-                  </div>
-                  <div className="claude-code-card__sub">
-                    {waitingForLogin
-                      ? 'Finish the browser sign-in. We’ll detect it automatically.'
-                      : 'Opens the Claude sign-in flow in your browser. Sign in once and we’ll detect it.'}
-                  </div>
-                </div>
-                <div className="claude-code-card__chevron">{waitingForLogin ? '\u2026' : '\u203A'}</div>
-              </button>
-            )}
 
-            {/* Not installed → link to install docs */}
-            {claudeCode && !claudeCode.installed && !usingClaudeCode && (
-              <button
-                type="button"
-                className="claude-code-card"
-                onClick={handleInstallClaudeCode}
-              >
-                <div className="claude-code-card__icon">
-                  <img src={claudeCodeLogo} alt="" />
-                </div>
-                <div className="claude-code-card__text">
-                  <div className="claude-code-card__title">Install Claude Code</div>
-                  <div className="claude-code-card__sub">
-                    <code>npm i -g @anthropic-ai/claude-code</code>{' \u00b7 then re-open this step.'}
-                  </div>
-                </div>
-                <div className="claude-code-card__chevron">&rsaquo;</div>
-              </button>
-            )}
+                <div className="provider-card__body">
+                  {!showAnthropicInput && claudeCode.installed && (
+                    <button
+                      type="button"
+                      className="provider-card__action"
+                      onClick={handleStartClaudeLogin}
+                      disabled={waitingForLogin}
+                    >
+                      <div className="claude-code-card__icon">
+                        <img src={claudeCodeLogo} alt="" />
+                      </div>
+                      <div className="claude-code-card__text">
+                        <div className="claude-code-card__title">
+                          {waitingForLogin ? 'Waiting for login…' : 'Click to log in'}
+                        </div>
+                        <div className="claude-code-card__sub">
+                          {waitingForLogin
+                            ? 'Finish the browser sign-in. We’ll detect it automatically.'
+                            : 'Opens the Claude sign-in flow in your browser. Sign in once and we’ll detect it.'}
+                        </div>
+                      </div>
+                      <div className="claude-code-card__chevron">{waitingForLogin ? '\u2026' : '\u203A'}</div>
+                    </button>
+                  )}
 
-            <>
-              <button
-                type="button"
-                className="provider-key-toggle"
-                onClick={() => setShowAnthropicInput((v) => !v)}
-              >
-                {showAnthropicInput ? 'Hide Anthropic API key' : 'Use Anthropic API key'}
-              </button>
-              {showAnthropicInput && (
-                <div className="provider-key-panel">
-                  <div className="apikey-input-wrap">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      className="apikey-input"
-                      placeholder="sk-ant-..."
-                      value={apiKey}
-                      onChange={(e) => { setApiKey(e.target.value); setTestResult(null); }}
-                      spellCheck={false}
-                    />
-                    <button className="apikey-toggle" onClick={() => setShowKey(!showKey)} tabIndex={-1}>
-                      {showKey ? 'Hide' : 'Show'}
+                  {!showAnthropicInput && !claudeCode.installed && (
+                    <button
+                      type="button"
+                      className="provider-card__action"
+                      onClick={handleInstallClaudeCode}
+                    >
+                      <div className="claude-code-card__icon">
+                        <img src={claudeCodeLogo} alt="" />
+                      </div>
+                      <div className="claude-code-card__text">
+                        <div className="claude-code-card__title">Install Claude Code</div>
+                        <div className="claude-code-card__sub">
+                          <code>npm i -g @anthropic-ai/claude-code</code>{' \u00b7 then re-open this step.'}
+                        </div>
+                      </div>
+                      <div className="claude-code-card__chevron">&rsaquo;</div>
                     </button>
-                  </div>
-                  <div className="apikey-actions">
-                    <button className="btn btn-secondary" onClick={handleTestKey} disabled={!apiKey.trim() || testing}>
-                      {testing ? 'Testing...' : 'Test Key'}
-                    </button>
-                  </div>
+                  )}
+
+                  {showAnthropicInput && (
+                    <div className="provider-card__keyform">
+                      <div className="apikey-input-wrap">
+                        <input
+                          type={showKey ? 'text' : 'password'}
+                          className="apikey-input"
+                          placeholder="sk-ant-..."
+                          value={apiKey}
+                          onChange={(e) => { setApiKey(e.target.value); setTestResult(null); }}
+                          spellCheck={false}
+                        />
+                        <button className="apikey-toggle" onClick={() => setShowKey(!showKey)} tabIndex={-1}>
+                          {showKey ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      <div className="apikey-actions">
+                        <button className="btn btn-secondary" onClick={handleTestKey} disabled={!apiKey.trim() || testing}>
+                          {testing ? 'Testing...' : 'Test Key'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
+              </div>
+            )}
 
             {/* Codex — authed → selectable card. Click flips to configured state. */}
             {codex?.authed && (
@@ -999,95 +999,107 @@ export function OnboardingApp() {
               </div>
             )}
 
-            {/* Codex — installed but not authed */}
+            {/* Codex not authed → same merged card pattern as Claude. */}
             {codex && !codex.authed && !usingCodex && (
-              <>
-                <button
-                  type="button"
-                  className="claude-code-card"
-                  onClick={handleStartCodexLoginPlain}
-                >
-                  <div className="claude-code-card__icon">
-                    <img src={codexLogo} alt="" />
-                  </div>
-                  <div className="claude-code-card__text">
-                    <div className="claude-code-card__title">
-                      {waitingForCodexLogin ? 'Waiting for login…' : 'Log in to Codex'}
-                    </div>
-                    <div className="claude-code-card__sub">
-                      {waitingForCodexLogin && codexDeviceCode
-                        ? 'Enter the code shown below, or click to restart.'
-                        : waitingForCodexLogin
-                          ? 'Finish the OAuth flow in your browser. Click to restart.'
-                          : 'Opens ChatGPT in your browser — sign in once, we’ll detect it.'}
-                    </div>
-                  </div>
-                  <div className="claude-code-card__chevron">{waitingForCodexLogin ? '↻' : '›'}</div>
-                </button>
-                {codexDeviceCode && (
-                  <div className="codex-device-auth">
-                    <div className="codex-device-auth__label">One-time code</div>
-                    <div className="codex-device-auth__code">{codexDeviceCode}</div>
-                    {codexVerificationUrl && (
-                      <button
-                        type="button"
-                        className="codex-device-auth__link"
-                        onClick={() => window.onboardingAPI.openExternal?.(codexVerificationUrl)}
-                      >
-                        Open verification page ↗
-                      </button>
-                    )}
-                  </div>
-                )}
-                {/* Remote/headless fallback. ChatGPT accounts need the
-                    "Enable device code authorization" toggle in Security
-                    Settings for this path to work server-side. */}
-                {!codexDeviceCode && (
+              <div className="provider-card">
+                <div className="provider-card__tabs" role="tablist">
                   <button
                     type="button"
-                    className="codex-device-auth__link codex-device-auth__link--secondary codex-device-auth__fallback"
-                    onClick={handleStartCodexLoginDeviceAuth}
+                    role="tab"
+                    aria-selected={!showOpenaiInput}
+                    className={`provider-card__tab${!showOpenaiInput ? ' is-active' : ''}`}
+                    onClick={() => setShowOpenaiInput(false)}
                   >
-                    Having trouble? Use device code flow instead
+                    Connect subscription
                   </button>
-                )}
-              </>
-            )}
-
-            <>
-              <button
-                type="button"
-                className="provider-key-toggle"
-                onClick={() => setShowOpenaiInput((v) => !v)}
-              >
-                {showOpenaiInput ? 'Hide OpenAI API key' : 'Use OpenAI API key'}
-              </button>
-              {showOpenaiInput && (
-                <div className="provider-key-panel">
-                  <div className="apikey-input-wrap">
-                    <input
-                      type={showOpenaiKey ? 'text' : 'password'}
-                      className="apikey-input"
-                      placeholder="sk-..."
-                      value={openaiKey}
-                      onChange={(e) => { setOpenaiKey(e.target.value); setOpenaiTestResult(null); }}
-                      spellCheck={false}
-                    />
-                    <button className="apikey-toggle" onClick={() => setShowOpenaiKey(!showOpenaiKey)} tabIndex={-1}>
-                      {showOpenaiKey ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  <div className="apikey-actions">
-                    <button className="btn btn-secondary" onClick={handleTestOpenaiKey} disabled={!openaiKey.trim() || openaiTesting}>
-                      {openaiTesting ? 'Testing...' : 'Test Key'}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={showOpenaiInput}
+                    className={`provider-card__tab${showOpenaiInput ? ' is-active' : ''}`}
+                    onClick={() => setShowOpenaiInput(true)}
+                  >
+                    Use API key
+                  </button>
                 </div>
-              )}
-            </>
 
+                <div className="provider-card__body">
+                  {!showOpenaiInput && (
+                    <>
+                      <button
+                        type="button"
+                        className="provider-card__action"
+                        onClick={handleStartCodexLoginPlain}
+                      >
+                        <div className="claude-code-card__icon">
+                          <img src={codexLogo} alt="" />
+                        </div>
+                        <div className="claude-code-card__text">
+                          <div className="claude-code-card__title">
+                            {waitingForCodexLogin ? 'Waiting for login…' : 'Log in to Codex'}
+                          </div>
+                          <div className="claude-code-card__sub">
+                            {waitingForCodexLogin && codexDeviceCode
+                              ? 'Enter the code shown below, or click to restart.'
+                              : waitingForCodexLogin
+                                ? 'Finish the OAuth flow in your browser. Click to restart.'
+                                : 'Opens ChatGPT in your browser — sign in once, we’ll detect it.'}
+                          </div>
+                        </div>
+                        <div className="claude-code-card__chevron">{waitingForCodexLogin ? '↻' : '›'}</div>
+                      </button>
+                      {codexDeviceCode && (
+                        <div className="codex-device-auth">
+                          <div className="codex-device-auth__label">One-time code</div>
+                          <div className="codex-device-auth__code">{codexDeviceCode}</div>
+                          {codexVerificationUrl && (
+                            <button
+                              type="button"
+                              className="codex-device-auth__link"
+                              onClick={() => window.onboardingAPI.openExternal?.(codexVerificationUrl)}
+                            >
+                              Open verification page ↗
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {!codexDeviceCode && (
+                        <button
+                          type="button"
+                          className="codex-device-auth__link codex-device-auth__link--secondary codex-device-auth__fallback"
+                          onClick={handleStartCodexLoginDeviceAuth}
+                        >
+                          Having trouble? Use device code flow instead
+                        </button>
+                      )}
+                    </>
+                  )}
 
-
+                  {showOpenaiInput && (
+                    <div className="provider-card__keyform">
+                      <div className="apikey-input-wrap">
+                        <input
+                          type={showOpenaiKey ? 'text' : 'password'}
+                          className="apikey-input"
+                          placeholder="sk-..."
+                          value={openaiKey}
+                          onChange={(e) => { setOpenaiKey(e.target.value); setOpenaiTestResult(null); }}
+                          spellCheck={false}
+                        />
+                        <button className="apikey-toggle" onClick={() => setShowOpenaiKey(!showOpenaiKey)} tabIndex={-1}>
+                          {showOpenaiKey ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      <div className="apikey-actions">
+                        <button className="btn btn-secondary" onClick={handleTestOpenaiKey} disabled={!openaiKey.trim() || openaiTesting}>
+                          {openaiTesting ? 'Testing...' : 'Test Key'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="apikey-actions apikey-actions--footer">
               <button
@@ -1106,77 +1118,6 @@ export function OnboardingApp() {
           </div>
         )}
 
-        {step === 'whatsapp' && (
-          <div className="step-panel">
-            <div className="step-title-row">
-              <img
-                className="step-title-icon"
-                src="https://static.whatsapp.net/rsrc.php/v3/yP/r/rYZqPCBaG70.png"
-                alt=""
-              />
-              <h1 className="step-title">Connect WhatsApp</h1>
-            </div>
-            <p className="step-subtitle">
-              Connect WhatsApp so you can text yourself <strong>@BU</strong> followed by a task to start a session, and get the agent's results back in the same chat. Messages without @BU stay as plain notes.
-            </p>
-
-            {waStatus === 'connected' && (
-              <div className="wa-connected">
-                <div className="wa-connected__icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <p className="wa-connected__text">
-                  Connected as {waIdentity ?? 'WhatsApp'}. Text yourself with <strong>@BU</strong> followed by a task (e.g. "@BU find me a flight to NYC") to start a session — plain notes without @BU are ignored.
-                </p>
-              </div>
-            )}
-
-            {waStatus !== 'connected' && (waStatus === 'qr_ready' || qrDataUrl) && (
-              <div className="wa-qr">
-                {qrDataUrl ? (
-                  <img className="wa-qr__img" src={qrDataUrl} alt="WhatsApp QR code" />
-                ) : (
-                  <div className="wa-qr__loading">Generating QR...</div>
-                )}
-                <p className="wa-qr__hint">
-                  Open WhatsApp on your phone, go to Linked Devices, and scan this code. After linking, text yourself with <strong>@BU</strong> followed by a task to start a session — messages without @BU are ignored, so the chat still works as a notes app.
-                </p>
-              </div>
-            )}
-
-            {waStatus === 'connecting' && !qrDataUrl && (
-              <div className="wa-connecting">
-                <div className="profile-spinner" />
-                <p>Connecting...</p>
-              </div>
-            )}
-
-            <div className="apikey-actions">
-              {waStatus === 'connected' ? (
-                <button className="btn btn-primary" onClick={() => setStep('notifications')}>
-                  Continue
-                </button>
-              ) : (
-                <button className="btn btn-primary" onClick={handleConnectWhatsApp}>
-                  Connect WhatsApp
-                </button>
-              )}
-            </div>
-
-            <div className="step-subactions">
-              <button className="back-btn" onClick={() => setStep('apikey')}>
-                Back
-              </button>
-              {waStatus !== 'connected' && (
-                <button className="back-btn back-btn-link" onClick={() => setStep('notifications')}>
-                  Skip for now
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {step === 'shortcut' && pillOpen && (
           <div className="step-panel pill-takeover">
@@ -1249,7 +1190,7 @@ export function OnboardingApp() {
         {step === 'notifications' && (
           <PreferencesStep
             onContinue={() => setStep('shortcut')}
-            onBack={() => setStep('whatsapp')}
+            onBack={() => setStep('notifications')}
           />
         )}
       </div>
