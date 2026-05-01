@@ -47,10 +47,11 @@ Two entry points:
    ```
 
    The workflow builds on macOS, produces an unsigned DMG (or a signed +
-   notarized DMG if secrets are present), writes `SHA256SUMS.txt`, and
-   publishes a GitHub Release at `https://github.com/<owner>/<repo>/releases/tag/v1.2.3`
-   with the DMG, zip, and checksums attached. Release notes are
-   auto-generated from commits since the previous tag.
+   notarized DMG if secrets are present), creates a Squirrel.Mac update ZIP,
+   writes `latest-mac.yml` and `SHA256SUMS.txt`, and publishes a GitHub
+   Release at `https://github.com/<owner>/<repo>/releases/tag/v1.2.3` with
+   the DMG, update ZIP, updater metadata, and checksums attached. Release
+   notes are auto-generated from commits since the previous tag.
 
 2. **`workflow_dispatch`** — for iteration and tester builds. Inputs:
 
@@ -91,13 +92,19 @@ The workflow flips `prerelease: true` based on substring match.
   `agentic-browser-<sha>`. Backup path for internal use or if Release
   publishing fails partway.
 
-The workflow does **not** publish to any update channel (no Squirrel /
-autoUpdater / brew). Users download the DMG from the Release page.
+**Auto-update feed.** The workflow publishes `latest-mac.yml` plus
+`Browser-Use-<arch>-mac.zip` to the GitHub Release. The app's
+`electron-updater` integration reads that feed from GitHub Releases, downloads
+the ZIP in the background, and applies it through Squirrel.Mac on restart or
+next quit. The DMG remains the first-install/manual-download artifact.
 
 **Version field.** `my-app/package.json`'s `version` is consumed by Forge
-when it names the DMG (`my-app-<version>-arm64.dmg`). Keep the `version`
-in sync with the tag you push — e.g. bump to `1.2.3` in a commit before
-tagging `v1.2.3`. The workflow does **not** auto-bump this for you.
+when it names the DMG (`my-app-<version>-arm64.dmg`) and by
+`electron-updater` when deciding whether a release is newer. Prefer
+`task release:publish`, which bumps and commits `my-app/package.json` before
+tagging. If you push a tag manually, bump the package version first; the
+release workflow fails fast if the tag version does not match
+`my-app/package.json`.
 
 ## Running locally
 

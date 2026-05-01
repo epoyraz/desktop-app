@@ -1,11 +1,12 @@
 /**
  * updater.ts — electron-updater integration.
  *
- * Uses electron-updater with the GitHub Releases provider to check for
+ * Uses electron-updater with a generic GitHub release-asset feed to check for
  * updates against https://github.com/browser-use/desktop-app/releases. The
- * release.yml workflow uploads DMGs + SHA256SUMS.txt to the tagged Release,
- * which is exactly the feed format electron-updater's `github` provider
- * expects.
+ * release.yml workflow uploads latest-mac.yml plus a Squirrel.Mac update ZIP
+ * to the tagged Release, which is the feed format electron-updater's
+ * `generic` provider expects. DMGs remain available for first installs and
+ * manual downloads.
  *
  * Flow:
  *   1. App becomes ready → initUpdater() schedules an initial check +
@@ -29,12 +30,11 @@ import type { AppUpdater } from 'electron-updater';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-// GitHub Releases provider — see forge.config.ts / release.yml. Using a
-// static options object (vs. reading `publish` from package.json) keeps the
-// feed config colocated with the code that consumes it and avoids needing
-// an electron-builder-style config block in package.json.
-const GITHUB_OWNER = 'browser-use';
-const GITHUB_REPO = 'desktop-app';
+// Generic GitHub release-asset feed — see release.yml. The explicit
+// /releases/latest/download URL makes electron-updater fetch latest-mac.yml
+// directly from the published release assets and avoids depending on
+// electron-builder's GitHub provider metadata generation.
+const UPDATE_FEED_URL = 'https://github.com/browser-use/desktop-app/releases/latest/download';
 
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
@@ -55,9 +55,8 @@ export function shouldSkipUpdates(): boolean {
  */
 function configureAutoUpdater(autoUpdater: AppUpdater): void {
   autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: GITHUB_OWNER,
-    repo: GITHUB_REPO,
+    provider: 'generic',
+    url: UPDATE_FEED_URL,
   });
 
   // Verbose diagnostics — electron-updater's logger interface is compatible
@@ -66,6 +65,8 @@ function configureAutoUpdater(autoUpdater: AppUpdater): void {
   (autoUpdater as any).logger = console;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  // The release workflow publishes full update ZIPs, not .blockmap files.
+  autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[updater] Checking for update');
@@ -140,8 +141,16 @@ export async function initUpdater(): Promise<void> {
   // packaged app this resolves synchronously out of node_modules.
   let autoUpdater: AppUpdater;
   try {
-    const mod = await import('electron-updater');
-    autoUpdater = mod.autoUpdater;
+    // CommonJS interop: depending on the bundler, `await import(...)` returns
+    // either { autoUpdater } (named) or { default: { autoUpdater } }
+    // (default-wrapped). Handle both so production builds don't end up with
+    // an undefined autoUpdater that throws on .setFeedURL.
+    const mod = (await import('electron-updater')) as { autoUpdater?: AppUpdater; default?: { autoUpdater?: AppUpdater } };
+    autoUpdater = (mod.autoUpdater ?? mod.default?.autoUpdater) as AppUpdater;
+    if (!autoUpdater) {
+      console.warn('[updater] electron-updater loaded but exposed no autoUpdater — auto-update disabled');
+      return;
+    }
   } catch (err) {
     console.warn('[updater] electron-updater failed to load — auto-update disabled:', (err as Error)?.message ?? err);
     return;
@@ -180,4 +189,3 @@ export function stopUpdater(): void {
   }
   initialized = false;
 }
-

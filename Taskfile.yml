@@ -232,7 +232,18 @@ tasks:
           exit 1
         fi
 
-        echo "→ tagging $tag → release.yml will build a notarized DMG and publish to GitHub Releases"
+        package_version=$(node -p "require('./my-app/package.json').version")
+        if [ "$package_version" != "$VERSION" ]; then
+          echo "→ bumping my-app/package.json from $package_version to $VERSION"
+          node -e "const fs=require('fs'); const p='my-app/package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); pkg.version=process.argv[1]; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');" "$VERSION"
+          git add my-app/package.json
+          git commit -m "Prepare release $tag" -m "Align the packaged Electron app version with the release tag so auto-update metadata advertises the same version that the app reports at runtime." -m "Constraint: electron-updater compares the published manifest version against app.getVersion()" -m "Confidence: high" -m "Scope-risk: narrow" -m "Tested: release.yml validates tag/package version before publishing" -m "Not-tested: signed CI build before tag push"
+          git push origin HEAD:main
+        else
+          echo "→ package version already at $VERSION"
+        fi
+
+        echo "→ tagging $tag → release.yml will build a notarized DMG, update ZIP, latest-mac.yml, and publish to GitHub Releases"
         git tag -a "$tag" -m "Release $tag"
         git push origin "$tag"
         echo

@@ -4,7 +4,7 @@
  * Verifies:
  *   - initUpdater() is a no-op in dev mode (app.isPackaged === false)
  *   - initUpdater() configures electron-updater's autoUpdater with the
- *     GitHub Releases provider when packaged.
+ *     GitHub release-asset feed when packaged.
  *   - initUpdater() wires the expected lifecycle events.
  *   - stopUpdater() tears down the periodic timer (verified by swapping
  *     globalThis.setInterval/clearInterval).
@@ -21,6 +21,7 @@ type Listener = (...args: unknown[]) => void;
 class FakeAutoUpdater {
   public autoDownload = false;
   public autoInstallOnAppQuit = false;
+  public disableDifferentialDownload = false;
   public logger: unknown = null;
   public feedURL: unknown = null;
   public checkCount = 0;
@@ -78,6 +79,7 @@ async function loadUpdaterFresh(
   // Clear captured state on the shared fake so assertions remain isolated.
   fakeAutoUpdater.autoDownload = false;
   fakeAutoUpdater.autoInstallOnAppQuit = false;
+  fakeAutoUpdater.disableDifferentialDownload = false;
   fakeAutoUpdater.logger = null;
   fakeAutoUpdater.feedURL = null;
   fakeAutoUpdater.checkCount = 0;
@@ -149,27 +151,27 @@ describe('updater (Issue #202)', () => {
       process.env.NODE_ENV = 'production';
     });
 
-    it('configures GitHub Releases feed for browser-use/desktop-app', async () => {
+    it('configures the GitHub release-asset feed for browser-use/desktop-app', async () => {
       const { updater } = await loadUpdaterFresh(true);
 
       await updater.initUpdater();
 
       expect(fakeAutoUpdater.feedURL).toEqual({
-        provider: 'github',
-        owner: 'browser-use',
-        repo: 'desktop-app',
+        provider: 'generic',
+        url: 'https://github.com/browser-use/desktop-app/releases/latest/download',
       });
 
       updater.stopUpdater();
     });
 
-    it('enables autoDownload + autoInstallOnAppQuit', async () => {
+    it('enables full-download background updates and install-on-quit', async () => {
       const { updater } = await loadUpdaterFresh(true);
 
       await updater.initUpdater();
 
       expect(fakeAutoUpdater.autoDownload).toBe(true);
       expect(fakeAutoUpdater.autoInstallOnAppQuit).toBe(true);
+      expect(fakeAutoUpdater.disableDifferentialDownload).toBe(true);
 
       updater.stopUpdater();
     });

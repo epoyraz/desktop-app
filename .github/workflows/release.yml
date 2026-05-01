@@ -1,7 +1,7 @@
 name: Release
 
-# Produces a downloadable DMG for a given ref and attaches it to a GitHub
-# Release page. Two entry points:
+# Produces a downloadable DMG plus the electron-updater macOS feed for a
+# given ref and attaches them to a GitHub Release page. Two entry points:
 #
 #   1. Push a git tag matching v*.*.* (e.g. `git tag v1.2.3 && git push origin v1.2.3`).
 #      This is the primary way to cut a release. The release name equals the tag.
@@ -207,14 +207,29 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run make
 
-      - name: Collect release assets + compute checksums
+      - name: Validate package version for tag releases
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          tag_version="${tag#v}"
+          package_version="$(node -p "require('./my-app/package.json').version")"
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "::error::Tag ${tag} does not match my-app/package.json version ${package_version}. electron-updater compares against the packaged app version, so publishing would not update users correctly."
+            exit 1
+          fi
+          echo "Package version matches release tag: ${package_version}"
+
+      - name: Collect release assets + compute update feed + checksums
         id: assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-assets
 
-          # macOS runner's /bin/bash is 3.2 — no `globstar`. Use `find` instead.
+          # macOS runner's /bin/bash is 3.2 — no `globstar` or `mapfile`.
+          # Use `find` loops instead.
           dmg_count=0
           while IFS= read -r f; do
             [[ -z "$f" ]] && continue
@@ -235,6 +250,30 @@ jobs:
           done < <(find my-app/out/make -type f -name '*.dmg')
 
           zip_count=0
+          while IFS= read -r app; do
+            [[ -z "$app" ]] && continue
+            parent="$(basename "$(dirname "$app")")"
+            case "$parent" in
+              *arm64*)     arch="arm64" ;;
+              *x64*)       arch="x64" ;;
+              *x86_64*)    arch="x64" ;;
+              *universal*) arch="universal" ;;
+              *)
+                arch="$(uname -m)"
+                [[ "$arch" == "x86_64" ]] && arch="x64"
+                ;;
+            esac
+            zip="release-assets/Browser-Use-${arch}-mac.zip"
+            ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+            zip_count=$((zip_count + 1))
+          done < <(find my-app/out -type d -name '*.app' -prune -print)
+
+          if [[ "$zip_count" -eq 0 ]]; then
+            echo "::error::No .app bundle found under my-app/out — cannot create Squirrel.Mac update ZIP."
+            find my-app/out -maxdepth 4 -type d -print || true
+            exit 1
+          fi
+
           while IFS= read -r f; do
             [[ -z "$f" ]] && continue
             cp "$f" release-assets/
@@ -247,6 +286,16 @@ jobs:
             exit 1
           fi
 
+          shopt -s nullglob
+          release_version="$(node -p "require('./my-app/package.json').version")"
+          release_date="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          node my-app/scripts/generate-mac-update-feed.mjs \
+            --version "$release_version" \
+            --release-date "$release_date" \
+            --output release-assets/latest-mac.yml \
+            release-assets/*-mac.zip \
+            release-assets/*.dmg
+
           # SHA256SUMS.txt covers every asset we're about to publish.
           # `nullglob` makes non-matching globs vanish instead of expanding
           # literally — important because `*.zip` may not exist (Forge won't
@@ -254,7 +303,7 @@ jobs:
           (
             cd release-assets
             shopt -s nullglob
-            shasum -a 256 *.dmg *.zip \
+            shasum -a 256 *.dmg *.zip *.yml \
               | sed 's|\./||g' \
               > SHA256SUMS.txt
           )
@@ -263,6 +312,8 @@ jobs:
           echo "zip_count=${zip_count}" >> "$GITHUB_OUTPUT"
           echo "Collected ${dmg_count} DMG(s) and ${zip_count} zip(s):"
           ls -la release-assets/
+          echo "---- latest-mac.yml ----"
+          cat release-assets/latest-mac.yml
           echo "---- SHA256SUMS.txt ----"
           cat release-assets/SHA256SUMS.txt
 
@@ -275,6 +326,7 @@ jobs:
           path: |
             release-assets/*.dmg
             release-assets/*.zip
+            release-assets/*.yml
             release-assets/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -297,4 +349,38 @@ jobs:
           files: |
             release-assets/*.dmg
             release-assets/*.zip
+            release-assets/*.yml
             release-assets/SHA256SUMS.txt
+
+      - name: Verify published updater feed
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          base_url="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+          curl -fsSL "${base_url}/latest-mac.yml" -o latest-mac.yml
+          node <<'NODE' > update-assets.txt
+          const fs = require('fs');
+          const manifest = fs.readFileSync('latest-mac.yml', 'utf8');
+          const pathMatch = manifest.match(/^path:\s*['"]?([^'"\n]+)['"]?/m);
+          if (!pathMatch || !pathMatch[1].endsWith('-mac.zip')) {
+            throw new Error('latest-mac.yml must use a -mac.zip as its primary path');
+          }
+          const urls = [...manifest.matchAll(/url:\s*['"]?([^'"\n]+)['"]?/g)].map((match) => match[1]);
+          if (!urls.some((url) => url.endsWith('-mac.zip'))) {
+            throw new Error('latest-mac.yml does not reference a macOS update ZIP');
+          }
+          if (!urls.some((url) => url.endsWith('.dmg'))) {
+            throw new Error('latest-mac.yml does not reference a DMG');
+          }
+          for (const url of urls) {
+            console.log(url);
+          }
+          NODE
+          while IFS= read -r asset; do
+            [[ -z "$asset" ]] && continue
+            echo "Verifying ${base_url}/${asset}"
+            curl -fsIL "${base_url}/${asset}" >/dev/null
+          done < update-assets.txt
