@@ -48,10 +48,10 @@ Two entry points:
 
    The workflow builds on macOS, produces an unsigned DMG (or a signed +
    notarized DMG if secrets are present), creates a Squirrel.Mac update ZIP,
-   writes `latest-mac.yml` and `SHA256SUMS.txt`, and publishes a GitHub
+   writes `latest-mac.yml`, and publishes a GitHub
    Release at `https://github.com/<owner>/<repo>/releases/tag/v1.2.3` with
-   the DMG, update ZIP, updater metadata, and checksums attached. Release
-   notes are auto-generated from commits since the previous tag.
+   the DMG, update ZIP, and updater metadata attached. Release notes are
+   auto-generated from commits since the previous tag.
 
 2. **`workflow_dispatch`** — for iteration and tester builds. Inputs:
 

@@ -221,19 +221,23 @@ jobs:
           fi
           echo "Package version matches release tag: ${package_version}"
 
-      - name: Collect release assets + compute update feed + checksums
+      - name: Collect release assets + compute update feed
         id: assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-assets
 
+          sanitize_asset_name() {
+            basename "$1" | tr ' ' '.'
+          }
+
           # macOS runner's /bin/bash is 3.2 — no `globstar` or `mapfile`.
           # Use `find` loops instead.
           dmg_count=0
           while IFS= read -r f; do
             [[ -z "$f" ]] && continue
-            cp "$f" release-assets/
+            cp "$f" "release-assets/$(sanitize_asset_name "$f")"
             dmg_count=$((dmg_count + 1))
             # Version-less copy so the
             # `/releases/latest/download/<file>` URL stays stable across
@@ -296,28 +300,14 @@ jobs:
             release-assets/*-mac.zip \
             release-assets/*.dmg
 
-          # SHA256SUMS.txt covers every asset we're about to publish.
-          # `nullglob` makes non-matching globs vanish instead of expanding
-          # literally — important because `*.zip` may not exist (Forge won't
-          # emit one for unsigned arm64 builds in some configurations).
-          (
-            cd release-assets
-            shopt -s nullglob
-            shasum -a 256 *.dmg *.zip *.yml \
-              | sed 's|\./||g' \
-              > SHA256SUMS.txt
-          )
-
           echo "dmg_count=${dmg_count}" >> "$GITHUB_OUTPUT"
           echo "zip_count=${zip_count}" >> "$GITHUB_OUTPUT"
           echo "Collected ${dmg_count} DMG(s) and ${zip_count} zip(s):"
           ls -la release-assets/
           echo "---- latest-mac.yml ----"
           cat release-assets/latest-mac.yml
-          echo "---- SHA256SUMS.txt ----"
-          cat release-assets/SHA256SUMS.txt
 
-      # Backup path: the raw DMG/zip/checksums stay available as a workflow
+      # Backup path: the raw DMG/zip/feed stay available as a workflow
       # artifact for 14 days regardless of what happens to the Release page.
       - name: Upload DMG artifact (backup)
         uses: actions/upload-artifact@v7
@@ -327,7 +317,6 @@ jobs:
             release-assets/*.dmg
             release-assets/*.zip
             release-assets/*.yml
-            release-assets/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -350,7 +339,6 @@ jobs:
             release-assets/*.dmg
             release-assets/*.zip
             release-assets/*.yml
-            release-assets/SHA256SUMS.txt
 
       - name: Verify published updater feed
         shell: bash
@@ -360,7 +348,17 @@ jobs:
         run: |
           set -euo pipefail
           base_url="https://github.com/${REPOSITORY}/releases/download/${TAG}"
-          curl -fsSL "${base_url}/latest-mac.yml" -o latest-mac.yml
+          for attempt in {1..12}; do
+            if curl -fsSL "${base_url}/latest-mac.yml" -o latest-mac.yml; then
+              break
+            fi
+            if [[ "$attempt" -eq 12 ]]; then
+              echo "::error::latest-mac.yml is not publicly downloadable at ${base_url}/latest-mac.yml. electron-updater runs without GitHub credentials, so release assets must be public."
+              exit 1
+            fi
+            echo "Waiting for latest-mac.yml to become publicly downloadable (attempt ${attempt}/12)"
+            sleep 5
+          done
           node <<'NODE' > update-assets.txt
           const fs = require('fs');
           const manifest = fs.readFileSync('latest-mac.yml', 'utf8');
@@ -382,5 +380,15 @@ jobs:
           while IFS= read -r asset; do
             [[ -z "$asset" ]] && continue
             echo "Verifying ${base_url}/${asset}"
-            curl -fsIL "${base_url}/${asset}" >/dev/null
+            for attempt in {1..12}; do
+              if curl -fsIL "${base_url}/${asset}" >/dev/null; then
+                break
+              fi
+              if [[ "$attempt" -eq 12 ]]; then
+                echo "::error::${asset} is not publicly downloadable at ${base_url}/${asset}. electron-updater cannot install updates unless every manifest asset URL is public."
+                exit 1
+              fi
+              echo "Waiting for ${asset} to become publicly downloadable (attempt ${attempt}/12)"
+              sleep 5
+            done
           done < update-assets.txt
