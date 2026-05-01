@@ -192,7 +192,9 @@ function buildTrayMenu(sessionManager: SessionManager): Menu {
   return Menu.buildFromTemplate(template);
 }
 
-export function createTray(sessionManager: SessionManager): Tray {
+export function createTray(sessionManager: SessionManager): Tray | null {
+  mainLogger.info('main.tray.start', { appPath: app.getAppPath(), assetDir: trayAssetDir() });
+
   if (currentTray && !currentTray.isDestroyed()) {
     mainLogger.info('main.tray.reuse');
     return currentTray;
@@ -202,7 +204,22 @@ export function createTray(sessionManager: SessionManager): Tray {
 
   trackedShellWindow = shellWindowFromUrl() ?? largestCurrentWindow();
 
-  const tray = new Tray(getTrayIcon());
+  let trayIcon: Electron.NativeImage;
+  try {
+    trayIcon = getTrayIcon();
+    mainLogger.info('main.tray.iconLoaded', { empty: trayIcon.isEmpty(), size: trayIcon.getSize() });
+  } catch (err) {
+    mainLogger.warn('main.tray.iconFailed', { error: (err as Error).message, stack: (err as Error).stack });
+    return null;
+  }
+
+  let tray: Tray;
+  try {
+    tray = new Tray(trayIcon);
+  } catch (err) {
+    mainLogger.warn('main.tray.constructFailed', { error: (err as Error).message, stack: (err as Error).stack });
+    return null;
+  }
   currentTray = tray;
   tray.setToolTip('Browser Use');
 
