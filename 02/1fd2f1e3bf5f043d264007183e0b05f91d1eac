@@ -1,0 +1,23 @@
+report.md
+  1208ee2be43ae8c1 1-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "021fd2f1e3bf5f043d264007183e0b05f91d1eac",
+  "prompts": {
+    "1208ee2be43ae8c1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5ee9c0f1-c2d3-4a0d-a029-6a767a6c177c",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Enes Poyraz",
+      "messages": [],
+      "total_additions": 177,
+      "total_deletions": 0,
+      "accepted_lines": 177,
+      "overriden_lines": 0
+    }
+  }
+}
